@@ -123,7 +123,7 @@
       display: flex; align-items: center; justify-content: center;
     }
     @media (min-width: 960px) {
-      .stage-wrap { aspect-ratio: 4 / 3; max-height: 520px; }
+      .stage-wrap { aspect-ratio: 4 / 3; max-height: 460px; }
     }
     #liveCanvas { width: 100%; height: 100%; object-fit: contain; display: block; }
     #cameraVideo { display: none; }
@@ -628,7 +628,61 @@
         return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (pos - lo);
       }
 
-      function computeLabAndSkinMap(imgData, threshScale = 1.0) {
+      // Fast O(N) Box Filter + Guided Filter (Section 6.1: edge-preserving mask refinement guided by L)
+      function boxMean2D(src, w, h, r) {
+        const tmp = new Float32Array(w * h);
+        const out = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) {
+          const row = y * w;
+          let sum = 0;
+          for (let x = 0; x <= Math.min(w - 1, r); x++) sum += src[row + x];
+          for (let x = 0; x < w; x++) {
+            const lo = Math.max(0, x - r), hi = Math.min(w - 1, x + r);
+            if (x > 0) {
+              if (x + r < w) sum += src[row + x + r];
+              if (x - r - 1 >= 0) sum -= src[row + x - r - 1];
+            }
+            tmp[row + x] = sum / (hi - lo + 1);
+          }
+        }
+        for (let x = 0; x < w; x++) {
+          let sum = 0;
+          for (let y = 0; y <= Math.min(h - 1, r); y++) sum += tmp[y * w + x];
+          for (let y = 0; y < h; y++) {
+            const lo = Math.max(0, y - r), hi = Math.min(h - 1, y + r);
+            if (y > 0) {
+              if (y + r < h) sum += tmp[(y + r) * w + x];
+              if (y - r - 1 >= 0) sum -= tmp[(y - r - 1) * w + x];
+            }
+            out[y * w + x] = sum / (hi - lo + 1);
+          }
+        }
+        return out;
+      }
+
+      function guidedFilterL(guideL, srcProb, w, h, r = 3, eps = 25) {
+        const n = w * h;
+        const meanI = boxMean2D(guideL, w, h, r);
+        const meanP = boxMean2D(srcProb, w, h, r);
+        const II = new Float32Array(n), IP = new Float32Array(n);
+        for (let i = 0; i < n; i++) { II[i] = guideL[i] * guideL[i]; IP[i] = guideL[i] * srcProb[i]; }
+        const meanII = boxMean2D(II, w, h, r);
+        const meanIP = boxMean2D(IP, w, h, r);
+        const a = new Float32Array(n), b = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const varI = Math.max(0, meanII[i] - meanI[i] * meanI[i]);
+          const covIP = meanIP[i] - meanI[i] * meanP[i];
+          a[i] = covIP / (varI + eps);
+          b[i] = meanP[i] - a[i] * meanI[i];
+        }
+        const meanA = boxMean2D(a, w, h, r);
+        const meanB = boxMean2D(b, w, h, r);
+        const q = new Float32Array(n);
+        for (let i = 0; i < n; i++) q[i] = clamp(meanA[i] * guideL[i] + meanB[i], 0, 1);
+        return q;
+      }
+
+      function computeLabAndSkinMap(imgData, threshScale = 1.0, useGuided = false, skinSeed = null) {
         const { width: w, height: h, data } = imgData;
         const n = w * h;
         const L = new Float32Array(n);
@@ -722,9 +776,14 @@
           const hue = Math.atan2(b, a) * RAD;
           const chr = Math.hypot(a, b);
           const inSkinHue = hue >= -25 && hue <= 85 && L[i] > 14 && L[i] < 95;
-          if (inSkinHue && minD >= 9.5) {
+          let seedMatch = false;
+          if (skinSeed) {
+            const dSeed = Math.hypot(0.45 * (L[i] - skinSeed[0]), A[i] - skinSeed[1], B[i] - skinSeed[2]);
+            if (dSeed <= 14.0 && minD >= 7.0) seedMatch = true;
+          }
+          if ((inSkinHue && minD >= 9.5) || seedMatch) {
             skinChromas.push(chr);
-            score[i] = chr;
+            score[i] = seedMatch ? Math.max(chr, 9.0) : chr;
           } else {
             score[i] = 0;
           }
@@ -819,6 +878,18 @@
         for (let i = 0; i < n; i++) {
           if (!bgVis[i]) mask[i] = 1;
           if (mask[i]) fgCount++;
+        }
+
+        // Optional Guided Filter pass (Section 6.1) for crisp luminance-aligned edges at 720px
+        if (useGuided) {
+          const prob = new Float32Array(n);
+          for (let i = 0; i < n; i++) prob[i] = mask[i];
+          const refined = guidedFilterL(L, prob, w, h, 3, 25);
+          fgCount = 0;
+          for (let i = 0; i < n; i++) {
+            mask[i] = refined[i] >= 0.48 ? 1 : 0;
+            if (mask[i]) fgCount++;
+          }
         }
 
         // Safety guard: if segmentation flooded >90% of image, clear mask so EDT never blows up
@@ -1357,13 +1428,17 @@
           theta[i] = sum / cnt;
         }
 
-        // Check curvature impossibility: kappa * halfW > 2 over >= 2% consecutive length
-        const badCurv = new Uint8Array(N);
+        // Check curvature impossibility: kappa * halfW > 2 over >= 2% consecutive length (Section 6.3)
+        const badRaw = new Uint8Array(N);
         for (let i = 1; i < N - 1; i++) {
           const ds = (sCum[i + 1] - sCum[i - 1]) * 0.5 || 1;
           const dTh = Math.abs(theta[i + 1] - theta[i - 1]) * 0.5 * DEG;
           const kappa = dTh / ds;
-          if (kappa * halfW > 2.0) badCurv[i] = 1;
+          if (kappa * halfW > 2.0) badRaw[i] = 1;
+        }
+        const badCurv = new Uint8Array(N);
+        for (let i = 1; i < N - 1; i++) {
+          if (badRaw[i] && (badRaw[i - 1] || badRaw[i + 1])) badCurv[i] = 1;
         }
 
         return { pts, sNorm, theta, validContour, badCurv, halfW, N };
@@ -1439,10 +1514,11 @@
         const { width: w, height: h } = imgData;
         const { ponta, sulco, base } = landmarks720;
 
-        // Compute 3 threshold levels (0.9, 1.0, 1.1)
-        const seg10 = computeLabAndSkinMap(imgData, 1.0);
-        const seg09 = computeLabAndSkinMap(imgData, 0.9);
-        const seg11 = computeLabAndSkinMap(imgData, 1.1);
+        // Compute 3 threshold levels (0.9, 1.0, 1.1) with Section 6.1 Guided Filter refinement
+        const seed = app.userSkinSeed || null;
+        const seg10 = computeLabAndSkinMap(imgData, 1.0, true, seed);
+        const seg09 = computeLabAndSkinMap(imgData, 0.9, true, seed);
+        const seg11 = computeLabAndSkinMap(imgData, 1.1, true, seed);
 
         const dt10 = computeEDT(seg10.mask, w, h);
         const dt09 = computeEDT(seg09.mask, w, h);
@@ -1751,6 +1827,7 @@
       const app = {
         viewMode: 'side', // 'side' | 'top'
         showMaskOverlay: true,
+        userSkinSeed: null,
         capturing: false,
         simulating: false,
         stream: null,
@@ -1781,6 +1858,8 @@
       const work270Ctx = work270.getContext('2d', { willReadFrequently: true });
       const work720 = document.createElement('canvas');
       const work720Ctx = work720.getContext('2d', { willReadFrequently: true });
+      const maskOverlayCanvas = document.createElement('canvas');
+      const maskOverlayCtx = maskOverlayCanvas.getContext('2d');
 
       function showToast(msg) {
         const t = el('toast');
@@ -1817,6 +1896,24 @@
       el('btnToggleMask').addEventListener('click', () => {
         app.showMaskOverlay = !app.showMaskOverlay;
         el('btnToggleMask').textContent = app.showMaskOverlay ? 'Máscara: ON' : 'Máscara: OFF';
+      });
+      liveCanvas.addEventListener('pointerdown', (ev) => {
+        if (!app.capturing || !work270.width) return;
+        const rect = liveCanvas.getBoundingClientRect();
+        const rx = clamp((ev.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+        const ry = clamp((ev.clientY - rect.top) / Math.max(1, rect.height), 0, 1);
+        const sx = Math.round(rx * (work270.width - 1));
+        const sy = Math.round(ry * (work270.height - 1));
+        const patch = work270Ctx.getImageData(Math.max(0, sx - 2), Math.max(0, sy - 2), 5, 5).data;
+        let sl = 0, sa = 0, sb = 0, cnt = 0;
+        for (let i = 0; i < patch.length; i += 4) {
+          const [l, a, b] = srgbToLab(patch[i], patch[i+1], patch[i+2]);
+          sl += l; sa += a; sb += b; cnt++;
+        }
+        if (cnt > 0) {
+          app.userSkinSeed = [sl / cnt, sa / cnt, sb / cnt];
+          showToast('Tom de pele calibrado pelo toque na haste.');
+        }
       });
 
       function renderConditionsUI(tracker, mode) {
@@ -2033,6 +2130,7 @@
         const timedOut = (performance.now() - (app.firstGoodLevelTime || app.startTime)) >= 12000 && frames.length < 12;
         const summary = aggregateView(measured, timedOut);
         app.results[view] = summary;
+        app.capturedFrames = []; // Release raw 720px frames immediately after measurement (privacy & RAM)
         renderResultsUI();
         el('hudPhase').textContent = 'Medição concluída';
         showToast(`Vista ${view === 'side' ? 'de lado' : 'de cima'} concluída (${summary.count} quadros válidos).`);
@@ -2075,7 +2173,7 @@
         work270Ctx.drawImage(sourceCanvasOrVideo, 0, 0, w270, h270);
         const img270 = work270Ctx.getImageData(0, 0, w270, h270);
 
-        const seg = computeLabAndSkinMap(img270, 1.0);
+        const seg = computeLabAndSkinMap(img270, 1.0, false, app.userSkinSeed);
         const dt = computeEDT(seg.mask, w270, h270);
         const recentPrev = (app.lastLandmarks && (tNow - app.lastLandmarksTime <= 350)) ? app.lastLandmarks : null;
         const lm = detectLandmarksFromMask(seg.mask, dt, w270, h270, recentPrev);
@@ -2101,18 +2199,18 @@
 
         // Draw translucent segmentation mask overlay so user can verify background separation live
         if (app.showMaskOverlay) {
-          const mCanvas = document.createElement('canvas');
-          mCanvas.width = w270; mCanvas.height = h270;
-          const mCtx = mCanvas.getContext('2d');
-          const mImg = mCtx.createImageData(w270, h270);
+          if (maskOverlayCanvas.width !== w270 || maskOverlayCanvas.height !== h270) {
+            maskOverlayCanvas.width = w270; maskOverlayCanvas.height = h270;
+          }
+          const mImg = maskOverlayCtx.createImageData(w270, h270);
           for (let i = 0; i < seg.mask.length; i++) {
             if (seg.mask[i]) {
               const p = i * 4;
               mImg.data[p] = 56; mImg.data[p+1] = 189; mImg.data[p+2] = 248; mImg.data[p+3] = 72;
             }
           }
-          mCtx.putImageData(mImg, 0, 0);
-          liveCtx.drawImage(mCanvas, 0, 0, liveCanvas.width, liveCanvas.height);
+          maskOverlayCtx.putImageData(mImg, 0, 0);
+          liveCtx.drawImage(maskOverlayCanvas, 0, 0, liveCanvas.width, liveCanvas.height);
         }
 
         // Draw landmarks overlay on liveCanvas
@@ -2293,9 +2391,9 @@
             const onVideoFrame = (now, metadata) => {
               if (!app.capturing) return;
               if (video.readyState >= 2 && video.videoWidth > 0) {
-                const frameTime = (metadata && typeof metadata.captureTime === 'number' && metadata.captureTime > 0)
-                  ? metadata.captureTime
-                  : now;
+                const perfNow = performance.now();
+                const ct = metadata && typeof metadata.captureTime === 'number' ? metadata.captureTime : 0;
+                const frameTime = (ct > 0 && Math.abs(ct - perfNow) < 2000) ? ct : perfNow;
                 processLiveFrame(video, video.videoWidth, video.videoHeight, frameTime);
               }
               if (app.capturing) video.requestVideoFrameCallback(onVideoFrame);
@@ -2454,6 +2552,7 @@
         app.results = { side: null, top: null };
         app.frameLogs = [];
         app.capturedFrames = [];
+        app.userSkinSeed = null;
         renderResultsUI();
         showToast('Quadros e resultados removidos da memória.');
       });
