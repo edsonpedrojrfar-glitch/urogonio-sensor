@@ -230,9 +230,10 @@
       </div>
 
       <nav class="tabs" aria-label="Navegação principal">
-        <button id="tabLive" class="tab-btn active" type="button">1. Captura</button>
-        <button id="tabResults" class="tab-btn" type="button">2. Laudo</button>
-        <button id="tabValidation" class="tab-btn" type="button">3. Validação 3D</button>
+        <button id="tabLive" class="tab-btn active" type="button">1. Vídeo</button>
+        <button id="tabPhoto" class="tab-btn" type="button">2. Foto</button>
+        <button id="tabResults" class="tab-btn" type="button">3. Laudo</button>
+        <button id="tabValidation" class="tab-btn" type="button">4. Validação</button>
       </nav>
     </div>
   </header>
@@ -333,6 +334,82 @@
               Orientação W3C (<code class="mono">RelativeOrientationSensor</code> + fallback <code class="mono">DeviceOrientationEvent</code>), rastreamento em 270 px e medição subpixel em 720 px. Quadros mantidos apenas em memória.
             </p>
           </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: AUTOMATIC PHOTO ANALYSIS -->
+    <section id="panelPhoto" class="grid-main hidden">
+      <div class="card">
+        <div class="card-title">
+          <span>Análise Automática por Foto</span>
+          <div class="row">
+            <button id="btnPhotoSide" type="button" class="btn btn-sm btn-primary">Vista de Lado</button>
+            <button id="btnPhotoTop" type="button" class="btn btn-sm">Vista de Cima</button>
+          </div>
+        </div>
+
+        <div id="photoDropZone" class="stage-wrap" style="cursor: crosshair;">
+          <canvas id="photoCanvas" width="720" height="960" style="width:100%;height:100%;object-fit:contain;display:block;"></canvas>
+          <div class="hud-top">
+            <div id="photoHudStatus" class="pill">Carregue ou cole uma foto</div>
+            <div id="photoHudAngle" class="pill pill-ok hidden">—</div>
+          </div>
+          <div class="hud-bottom">
+            <div id="photoHudHint" class="pill">Toque na haste para calibrar o tom</div>
+            <div id="photoHudContrast" class="pill mono">Contraste: —</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+          <input id="photoAnalyzeInput" type="file" accept="image/*" style="width:100%; font-size:12px; color:var(--text); background:var(--bg); border:1px solid var(--border-hi); border-radius:9px; padding:7px;" />
+          <div class="row" style="justify-content: space-between;">
+            <div class="row">
+              <button id="btnPhotoPaste" type="button" class="btn btn-primary btn-sm">Colar Foto</button>
+              <button id="btnPhotoToggleMask" type="button" class="btn btn-sm">Máscara: ON</button>
+              <button id="btnPhotoClearSeed" type="button" class="btn btn-sm hidden">Limpar Tom</button>
+            </div>
+            <button id="btnPhotoClear" type="button" class="btn btn-rose btn-sm hidden">Limpar Foto</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="card">
+          <div class="card-title">
+            <span>Medição Automática da Foto</span>
+            <span id="photoResultTag" class="tag">Aguardando foto</span>
+          </div>
+          <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="row" style="gap: 12px; align-items: center;">
+              <div id="photoSvgWrap" class="res-visual"></div>
+              <div>
+                <div id="photoAngleVal" class="metric-big">—</div>
+                <div id="photoDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+                <div id="photoKelamiVal" style="font-size: 11px; color: var(--muted); margin-top: 2px;">Kelâmi: —</div>
+              </div>
+            </div>
+            <div style="text-align: right; font-size: 12px; color: var(--muted);">
+              <div>Faixa (31x): <strong id="photoRangeVal" class="mono" style="color: var(--text);">—</strong></div>
+              <div>Contorno perdido: <strong id="photoMissingVal" class="mono" style="color: var(--text);">—</strong></div>
+              <div>Largura haste: <strong id="photoWidthVal" class="mono" style="color: var(--text);">—</strong></div>
+            </div>
+          </div>
+          <div id="photoRejectNote" style="margin-top: 8px; font-size: 11px; color: var(--amber);"></div>
+          <div class="row" style="margin-top: 12px;">
+            <button id="btnPhotoReanalyze" type="button" class="btn btn-sm" disabled>Reanalisar</button>
+            <button id="btnPhotoSendReport" type="button" class="btn btn-emerald btn-sm" disabled>Adicionar ao Laudo</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>Como funciona a análise por foto</span></div>
+          <p style="font-size: 12px; color: var(--muted); line-height: 1.55;">
+            Usa exatamente o mesmo motor do vídeo: segmentação <strong>CIE Lab</strong> com 2 cores de fundo + anti-sombra, marcos geodésicos (<strong>Ponta, Sulco A, Base B</strong>), <strong>Guided Filter</strong> em 720 px, cortes perpendiculares subpixel e <strong>31 recálculos</strong> (reta–rampa–reta).
+          </p>
+          <p style="font-size: 11px; color: var(--muted); margin-top: 8px;">
+            <strong>Nota:</strong> fotos estáticas não têm sensores de inclinação — suponha câmera nivelada. Se o fundo confundir a máscara, toque sobre a haste na imagem para calibrar o tom local. Processamento 100% local em memória.
+          </p>
         </div>
       </div>
     </section>
@@ -1634,12 +1711,12 @@
         return { delta: -bestB, missingRatio };
       }
 
-      function measureFrameFull(imgData, landmarks720, viewMode, R) {
+      function measureFrameFull(imgData, landmarks720, viewMode, R, skinSeedOverride = undefined) {
         const { width: w, height: h } = imgData;
         const { ponta, sulco, base } = landmarks720;
 
         // Compute 3 threshold levels (0.9, 1.0, 1.1) with Section 6.1 Guided Filter refinement
-        const seed = app.userSkinSeed || null;
+        const seed = skinSeedOverride !== undefined ? skinSeedOverride : (app.userSkinSeed || null);
         const seg10 = computeLabAndSkinMap(imgData, 1.0, true, seed);
         const seg09 = computeLabAndSkinMap(imgData, 0.9, true, seed);
         const seg11 = computeLabAndSkinMap(imgData, 1.1, true, seed);
@@ -2000,15 +2077,20 @@
       }
 
       // Tabs
+      let activeTab = 'live';
       function switchTab(tab) {
+        activeTab = tab;
         el('panelLive').classList.toggle('hidden', tab !== 'live');
+        el('panelPhoto').classList.toggle('hidden', tab !== 'photo');
         el('panelResults').classList.toggle('hidden', tab !== 'results');
         el('panelValidation').classList.toggle('hidden', tab !== 'validation');
         el('tabLive').classList.toggle('active', tab === 'live');
+        el('tabPhoto').classList.toggle('active', tab === 'photo');
         el('tabResults').classList.toggle('active', tab === 'results');
         el('tabValidation').classList.toggle('active', tab === 'validation');
       }
       el('tabLive').addEventListener('click', () => switchTab('live'));
+      el('tabPhoto').addEventListener('click', () => switchTab('photo'));
       el('tabResults').addEventListener('click', () => switchTab('results'));
       el('tabValidation').addEventListener('click', () => switchTab('validation'));
 
@@ -3132,6 +3214,388 @@
       if (window.isSecureContext === false) {
         el('insecureBanner').classList.remove('hidden');
       }
+      // =========================================================================
+      // 10. AUTOMATIC PHOTO ANALYSIS MODULE (Upload / Paste / Drag & Drop)
+      // =========================================================================
+      const photoState = {
+        imgObj: null,
+        objectUrl: null,
+        viewMode: 'side', // 'side' | 'top'
+        showMask: true,
+        skinSeed: null,
+        lastResult: null,
+        lastWork270: null
+      };
+
+      const photoCanvas = el('photoCanvas');
+      const photoCtx = photoCanvas.getContext('2d', { willReadFrequently: true });
+      const pWork270 = document.createElement('canvas');
+      const pWork270Ctx = pWork270.getContext('2d', { willReadFrequently: true });
+      const pWork720 = document.createElement('canvas');
+      const pWork720Ctx = pWork720.getContext('2d', { willReadFrequently: true });
+      const pMaskCanvas = document.createElement('canvas');
+      const pMaskCtx = pMaskCanvas.getContext('2d');
+
+      function drawPhotoIdle() {
+        const w = photoCanvas.width, h = photoCanvas.height;
+        photoCtx.fillStyle = '#050b16';
+        photoCtx.fillRect(0, 0, w, h);
+        photoCtx.strokeStyle = 'rgba(56,189,248,0.28)';
+        photoCtx.lineWidth = 2;
+        photoCtx.setLineDash([8, 6]);
+        photoCtx.strokeRect(w * 0.08, h * 0.08, w * 0.84, h * 0.84);
+        photoCtx.setLineDash([]);
+        photoCtx.fillStyle = '#cbd5e1';
+        photoCtx.font = '600 20px sans-serif';
+        photoCtx.textAlign = 'center';
+        photoCtx.fillText('Envie, arraste ou cole (Ctrl+V) uma foto', w * 0.5, h * 0.5 - 12);
+        photoCtx.fillStyle = '#94a3b8';
+        photoCtx.font = '500 15px sans-serif';
+        photoCtx.fillText('A mesma máscara CIE Lab + medição automática será aplicada', w * 0.5, h * 0.5 + 22);
+      }
+
+      function analyzeLoadedPhoto() {
+        if (!photoState.imgObj) {
+          drawPhotoIdle();
+          return;
+        }
+        const img = photoState.imgObj;
+        const w720 = 720;
+        const h720 = Math.max(240, Math.round(720 * (img.naturalHeight / Math.max(1, img.naturalWidth))));
+        photoCanvas.width = w720;
+        photoCanvas.height = h720;
+        pWork720.width = w720;
+        pWork720.height = h720;
+        pWork720Ctx.drawImage(img, 0, 0, w720, h720);
+        const img720 = pWork720Ctx.getImageData(0, 0, w720, h720);
+
+        const w270 = 270;
+        const h270 = Math.max(90, Math.round(270 * (img.naturalHeight / Math.max(1, img.naturalWidth))));
+        pWork270.width = w270;
+        pWork270.height = h270;
+        pWork270Ctx.drawImage(img, 0, 0, w270, h270);
+        const img270 = pWork270Ctx.getImageData(0, 0, w270, h270);
+
+        // Step 1: Same Lab + 2-color background + anti-shadow + morphology mask
+        const seg270 = computeLabAndSkinMap(img270, 1.0, false, photoState.skinSeed);
+        const dt270 = computeEDT(seg270.mask, w270, h270);
+        const lm270 = detectLandmarksFromMask(seg270.mask, dt270, w270, h270);
+
+        // Draw photo + optional mask overlay
+        photoCtx.drawImage(pWork720, 0, 0, w720, h720);
+        if (photoState.showMask) {
+          pMaskCanvas.width = w270; pMaskCanvas.height = h270;
+          const mImg = pMaskCtx.createImageData(w270, h270);
+          for (let i = 0; i < seg270.mask.length; i++) {
+            if (seg270.mask[i]) {
+              const p = i * 4;
+              mImg.data[p] = 56; mImg.data[p+1] = 189; mImg.data[p+2] = 248; mImg.data[p+3] = 82;
+            }
+          }
+          pMaskCtx.putImageData(mImg, 0, 0);
+          photoCtx.drawImage(pMaskCanvas, 0, 0, w720, h720);
+        }
+
+        const cScore = seg270.contrastScore || 0;
+        el('photoHudContrast').textContent = `Contraste: ${cScore >= 16 ? 'Bom' : (cScore >= 11 ? 'Regular' : 'Baixo')}`;
+
+        if (!lm270) {
+          photoState.lastResult = null;
+          el('photoHudStatus').textContent = 'Silhueta não detectada';
+          el('photoHudAngle').classList.add('hidden');
+          el('photoResultTag').textContent = 'Não detectado';
+          el('photoResultTag').className = 'tag tag-err';
+          el('photoAngleVal').textContent = '—';
+          el('photoDirVal').textContent = 'Sentido: —';
+          el('photoKelamiVal').textContent = 'Kelâmi: —';
+          el('photoRangeVal').textContent = '—';
+          el('photoMissingVal').textContent = '—';
+          el('photoWidthVal').textContent = '—';
+          el('photoRejectNote').textContent = 'Toque diretamente sobre a haste na foto para calibrar o tom de pele.';
+          el('btnPhotoSendReport').disabled = true;
+          return;
+        }
+
+        // Draw detected landmarks & axis on photoCanvas
+        const sScale = w720 / w270;
+        const lm720 = {
+          ponta: { x: lm270.ponta.x * sScale, y: lm270.ponta.y * sScale },
+          sulco: { x: lm270.sulco.x * sScale, y: lm270.sulco.y * sScale },
+          base:  { x: lm270.base.x * sScale,  y: lm270.base.y * sScale },
+          L: lm270.L * sScale,
+          largura: lm270.largura * sScale
+        };
+
+        photoCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+        photoCtx.lineWidth = 3.5;
+        photoCtx.beginPath();
+        photoCtx.moveTo(lm720.base.x, lm720.base.y);
+        photoCtx.lineTo(lm720.sulco.x, lm720.sulco.y);
+        photoCtx.lineTo(lm720.ponta.x, lm720.ponta.y);
+        photoCtx.stroke();
+
+        const drawP = (pt, col, lbl) => {
+          photoCtx.beginPath();
+          photoCtx.arc(pt.x, pt.y, 8, 0, Math.PI * 2);
+          photoCtx.fillStyle = col;
+          photoCtx.fill();
+          photoCtx.strokeStyle = '#0f172a';
+          photoCtx.lineWidth = 2;
+          photoCtx.stroke();
+          photoCtx.fillStyle = '#ffffff';
+          photoCtx.font = 'bold 13px sans-serif';
+          photoCtx.fillText(lbl, pt.x + 11, pt.y + 4);
+        };
+        drawP(lm720.ponta, '#34d399', 'Ponta');
+        drawP(lm720.sulco, '#fbbf24', 'Sulco (A)');
+        drawP(lm720.base,  '#38bdf8', 'Base (B)');
+
+        // Canonical leveled camera matrix R for static photo
+        const R = photoState.viewMode === 'side'
+          ? [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
+          : [[1, 0, 0], [0, -1, 0], [0, 0, -1]];
+
+        const res = measureFrameFull(img720, lm720, photoState.viewMode, R, photoState.skinSeed);
+        photoState.lastResult = res;
+
+        el('photoWidthVal').textContent = `${Math.round(lm720.largura)} px`;
+        el('photoRangeVal').textContent = res.methodRange !== undefined ? `${res.methodRange.toFixed(1)}°` : '—';
+        el('photoMissingVal').textContent = res.missingRatio !== undefined ? `${(res.missingRatio * 100).toFixed(1)}%` : '—';
+
+        if (res.rejected) {
+          el('photoHudStatus').textContent = `Rejeitado: ${res.reason}`;
+          el('photoHudAngle').classList.add('hidden');
+          el('photoResultTag').textContent = 'Rejeitado';
+          el('photoResultTag').className = 'tag tag-err';
+          el('photoAngleVal').textContent = res.angle !== undefined ? `${res.angle.toFixed(1)}°` : '—';
+          el('photoDirVal').textContent = 'Sentido: —';
+          el('photoKelamiVal').textContent = 'Kelâmi: —';
+          el('photoSvgWrap').innerHTML = buildCurveSvg(null, '', photoState.viewMode === 'side');
+          el('photoRejectNote').textContent = `Motivo: ${res.reason}. Tente tocar na haste para calibrar o tom ou usar uma foto com fundo mais uniforme.`;
+          el('btnPhotoSendReport').disabled = true;
+        } else {
+          el('photoHudStatus').textContent = 'Análise concluída';
+          el('photoHudAngle').textContent = `${res.angle.toFixed(1)}° ${res.direction}`;
+          el('photoHudAngle').classList.remove('hidden');
+          el('photoResultTag').textContent = 'Aceito';
+          el('photoResultTag').className = 'tag tag-ok';
+          el('photoAngleVal').textContent = `${res.angle.toFixed(1)}°`;
+          el('photoDirVal').textContent = `Sentido: ${res.direction}`;
+          el('photoKelamiVal').textContent = 'Kelâmi: ' + kelamiLabel(res.angle);
+          el('photoSvgWrap').innerHTML = buildCurveSvg(res.angle, res.direction, photoState.viewMode === 'side');
+          el('photoRejectNote').textContent = res.methodRange > 4.0
+            ? `Atenção: faixa dos 31 recálculos elevada (${res.methodRange.toFixed(1)}° > 4°). Verifique se a máscara azul acompanha toda a haste.`
+            : '';
+          el('btnPhotoSendReport').disabled = false;
+        }
+      }
+
+      function loadPhotoFile(file) {
+        if (!file) return;
+        const loadImgFromUrl = (url, isObjUrl) => {
+          const img = new Image();
+          img.onload = () => {
+            if (photoState.objectUrl && photoState.objectUrl !== url) {
+              try { URL.revokeObjectURL(photoState.objectUrl); } catch (_) {}
+            }
+            photoState.imgObj = img;
+            photoState.objectUrl = isObjUrl ? url : null;
+            photoState.skinSeed = null;
+            el('btnPhotoClearSeed').classList.add('hidden');
+            el('btnPhotoClear').classList.remove('hidden');
+            el('btnPhotoReanalyze').disabled = false;
+            analyzeLoadedPhoto();
+            showToast('Foto analisada localmente.');
+          };
+          img.onerror = () => {
+            if (isObjUrl) { try { URL.revokeObjectURL(url); } catch (_) {} }
+            showToast('Formato não suportado (ex.: HEIC). Use JPG ou PNG.');
+          };
+          img.src = url;
+        };
+
+        if (window.URL && URL.createObjectURL) {
+          loadImgFromUrl(URL.createObjectURL(file), true);
+        } else {
+          const fr = new FileReader();
+          fr.onload = () => loadImgFromUrl(fr.result, false);
+          fr.readAsDataURL(file);
+        }
+      }
+
+      el('photoAnalyzeInput').addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          loadPhotoFile(e.target.files[0]);
+          e.target.value = '';
+        }
+      });
+
+      el('btnPhotoSide').addEventListener('click', () => {
+        photoState.viewMode = 'side';
+        el('btnPhotoSide').className = 'btn btn-sm btn-primary';
+        el('btnPhotoTop').className = 'btn btn-sm';
+        if (photoState.imgObj) analyzeLoadedPhoto();
+      });
+
+      el('btnPhotoTop').addEventListener('click', () => {
+        photoState.viewMode = 'top';
+        el('btnPhotoTop').className = 'btn btn-sm btn-primary';
+        el('btnPhotoSide').className = 'btn btn-sm';
+        if (photoState.imgObj) analyzeLoadedPhoto();
+      });
+
+      el('btnPhotoToggleMask').addEventListener('click', () => {
+        photoState.showMask = !photoState.showMask;
+        el('btnPhotoToggleMask').textContent = photoState.showMask ? 'Máscara: ON' : 'Máscara: OFF';
+        if (photoState.imgObj) analyzeLoadedPhoto();
+      });
+
+      el('btnPhotoClearSeed').addEventListener('click', () => {
+        photoState.skinSeed = null;
+        el('btnPhotoClearSeed').classList.add('hidden');
+        if (photoState.imgObj) analyzeLoadedPhoto();
+        showToast('Tom manual limpo (modo automático).');
+      });
+
+      el('btnPhotoClear').addEventListener('click', () => {
+        if (photoState.objectUrl) { try { URL.revokeObjectURL(photoState.objectUrl); } catch (_) {} }
+        photoState.imgObj = null;
+        photoState.objectUrl = null;
+        photoState.skinSeed = null;
+        photoState.lastResult = null;
+        el('btnPhotoClear').classList.add('hidden');
+        el('btnPhotoClearSeed').classList.add('hidden');
+        el('btnPhotoReanalyze').disabled = true;
+        el('btnPhotoSendReport').disabled = true;
+        el('photoHudStatus').textContent = 'Carregue ou cole uma foto';
+        el('photoHudAngle').classList.add('hidden');
+        el('photoHudContrast').textContent = 'Contraste: —';
+        el('photoResultTag').textContent = 'Aguardando foto';
+        el('photoResultTag').className = 'tag';
+        el('photoAngleVal').textContent = '—';
+        el('photoDirVal').textContent = 'Sentido: —';
+        el('photoKelamiVal').textContent = 'Kelâmi: —';
+        el('photoRangeVal').textContent = '—';
+        el('photoMissingVal').textContent = '—';
+        el('photoWidthVal').textContent = '—';
+        el('photoRejectNote').textContent = '';
+        el('photoSvgWrap').innerHTML = buildCurveSvg(null, '', true);
+        drawPhotoIdle();
+        showToast('Foto removida da memória.');
+      });
+
+      el('btnPhotoReanalyze').addEventListener('click', () => {
+        if (photoState.imgObj) analyzeLoadedPhoto();
+      });
+
+      el('btnPhotoSendReport').addEventListener('click', () => {
+        const res = photoState.lastResult;
+        if (!res || res.rejected) return;
+        const view = photoState.viewMode;
+        app.frameLogs.push({ view, index: app.frameLogs.length + 1, ...res });
+        app.results[view] = {
+          reliable: true,
+          angle: res.angle,
+          rawMedian: res.angle,
+          direction: res.direction,
+          count: 1,
+          range: res.methodRange || 0,
+          alphaDeg: res.penisElevDeg !== null ? res.penisElevDeg : null,
+          warnings: ['Medição obtida por foto estática (1 quadro, sem sensores).']
+        };
+        renderResultsUI();
+        showToast('Medição da foto adicionada ao Laudo.');
+        switchTab('results');
+      });
+
+      // Paste button + Ctrl+V paste + Drag & Drop on photoCanvas
+      el('btnPhotoPaste').addEventListener('click', async () => {
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+          showToast('Use Ctrl+V / Cmd+V ou escolha a foto pelo seletor acima.');
+          return;
+        }
+        try {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            const t = item.types.find(tp => tp.startsWith('image/'));
+            if (t) {
+              const blob = await item.getType(t);
+              loadPhotoFile(new File([blob], 'foto-colada.png', { type: t }));
+              return;
+            }
+          }
+          showToast('Nenhuma imagem encontrada na área de transferência.');
+        } catch (_) {
+          showToast('Permissão negada para colar por botão. Use Ctrl+V ou o seletor de arquivo.');
+        }
+      });
+
+      window.addEventListener('paste', (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.startsWith('image/')) {
+            const f = items[i].getAsFile();
+            if (f) {
+              e.preventDefault();
+              if (activeTab !== 'photo') switchTab('photo');
+              loadPhotoFile(f);
+              return;
+            }
+          }
+        }
+      });
+
+      const pDrop = el('photoDropZone');
+      pDrop.addEventListener('dragover', (e) => { e.preventDefault(); });
+      pDrop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          loadPhotoFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Tap on photoCanvas to calibrate skin tone (regularized Mahalanobis in a-b) & re-analyze immediately
+      photoCanvas.addEventListener('pointerdown', (ev) => {
+        if (!photoState.imgObj || !pWork270.width) return;
+        const rect = photoCanvas.getBoundingClientRect();
+        // Account for object-fit: contain letterboxing
+        const imgAspect = photoCanvas.width / Math.max(1, photoCanvas.height);
+        const boxAspect = rect.width / Math.max(1, rect.height);
+        let drawW = rect.width, drawH = rect.height, offX = 0, offY = 0;
+        if (imgAspect > boxAspect) {
+          drawH = rect.width / imgAspect;
+          offY = (rect.height - drawH) * 0.5;
+        } else {
+          drawW = rect.height * imgAspect;
+          offX = (rect.width - drawW) * 0.5;
+        }
+        const rx = clamp((ev.clientX - rect.left - offX) / Math.max(1, drawW), 0, 1);
+        const ry = clamp((ev.clientY - rect.top - offY) / Math.max(1, drawH), 0, 1);
+        const sx = Math.round(rx * (pWork270.width - 1));
+        const sy = Math.round(ry * (pWork270.height - 1));
+        const rad = Math.max(6, Math.round(pWork270.width * 0.04));
+        const x0 = Math.max(0, sx - rad), y0 = Math.max(0, sy - rad);
+        const pw = Math.min(pWork270.width - x0, rad * 2 + 1);
+        const ph = Math.min(pWork270.height - y0, rad * 2 + 1);
+        const patch = pWork270Ctx.getImageData(x0, y0, pw, ph).data;
+        const vals = [];
+        for (let i = 0; i < patch.length; i += 4) vals.push(srgbToLab(patch[i], patch[i+1], patch[i+2]));
+        if (vals.length > 0) {
+          const ml = vals.reduce((a, v) => a + v[0], 0) / vals.length;
+          const ma = vals.reduce((a, v) => a + v[1], 0) / vals.length;
+          const mb = vals.reduce((a, v) => a + v[2], 0) / vals.length;
+          let va = 0, vb = 0, cab = 0;
+          for (const v of vals) { const da = v[1]-ma, db = v[2]-mb; va += da*da; vb += db*db; cab += da*db; }
+          photoState.skinSeed = { mean: [ml, ma, mb], varA: va/vals.length, varB: vb/vals.length, covAB: cab/vals.length };
+          el('btnPhotoClearSeed').classList.remove('hidden');
+          analyzeLoadedPhoto();
+          showToast('Tom de pele calibrado na foto.');
+        }
+      });
+
+      el('photoSvgWrap').innerHTML = buildCurveSvg(null, '', true);
+      drawPhotoIdle();
       updateStepperUI();
       drawIdleGuide();
     })();
