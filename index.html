@@ -1302,17 +1302,17 @@
           return { x: cx, y: cy, d: dt[cy * w + cx] };
         });
 
-        // Estimate initial tubular radius r0 strictly from the distal shaft band (past tip cap, before torso)
-        const capSkip = Math.min(Math.floor(ridgePts.length * 0.15), Math.max(6, Math.round(ridgePts[Math.min(12, ridgePts.length - 1)].d * 1.1)));
-        const distalEnd = Math.min(ridgePts.length - 4, capSkip + Math.max(18, Math.floor(ridgePts.length * 0.30)));
+        // Estimate initial tubular radius r0 strictly on the mid-shaft (past glans corona: 22%..52% of path)
+        const capSkip = Math.max(8, Math.floor(ridgePts.length * 0.22));
+        const distalEnd = Math.min(ridgePts.length - 4, Math.max(capSkip + 12, Math.floor(ridgePts.length * 0.52)));
         const initRadii = [];
         for (let k = capSkip; k <= distalEnd; k++) initRadii.push(ridgePts[k].d);
         const r0 = Math.max(2, medianArr(initRadii));
 
-        // Base (B): walking from tip toward body, first sustained expansion where thickness > 1.25 * r0
-        let basePathIdx = Math.floor(ridgePts.length * 0.85);
+        // Base (B): walking from mid-shaft toward body, stop at first sustained penopubic/penoscrotal flare (> 1.18 * r0)
+        let basePathIdx = Math.floor(ridgePts.length * 0.82);
         for (let k = capSkip + 4; k < ridgePts.length - 4; k++) {
-          if (ridgePts[k].d > r0 * 1.25 && ridgePts[k + 1].d > r0 * 1.25 && ridgePts[k + 2].d > r0 * 1.25) {
+          if (ridgePts[k].d > r0 * 1.18 && ridgePts[k + 1].d > r0 * 1.18 && ridgePts[k + 2].d > r0 * 1.18) {
             basePathIdx = Math.max(capSkip + 8, k - 2);
             break;
           }
@@ -1582,7 +1582,7 @@
 
             if (leftEdge > 1 && rightEdge < profLen - 2 && rightEdge > leftEdge + 3) {
               const widthPx = rightEdge - leftEdge;
-              if (widthPx >= halfW * 1.1 && widthPx <= halfW * 2.9) {
+              if (widthPx >= halfW * 1.35 && widthPx <= halfW * 2.38) {
                 const subLeft = fitErfEdge(profL, leftEdge, false) - searchR;
                 const subRight = fitErfEdge(profL, rightEdge, true) - searchR;
                 const midOff = 0.5 * (subLeft + subRight);
@@ -1848,7 +1848,9 @@
           missingRatio: worstMissing,
           penisElevDeg,
           L: landmarks720.L,
-          largura: landmarks720.largura
+          largura: landmarks720.largura,
+          centerline: attMain.pts,
+          validContour: attMain.validContour
         };
       }
 
@@ -3393,6 +3395,20 @@
           el('photoRejectNote').textContent = `Motivo: ${res.reason}. Tente tocar na haste para calibrar o tom ou usar uma foto com fundo mais uniforme.`;
           el('btnPhotoSendReport').disabled = true;
         } else {
+          if (res.centerline && res.centerline.length >= 2) {
+            photoCtx.save();
+            photoCtx.lineWidth = 4;
+            photoCtx.lineCap = 'round';
+            for (let i = 1; i < res.centerline.length; i++) {
+              const ok = res.validContour ? (res.validContour[i] && res.validContour[i - 1]) : true;
+              photoCtx.strokeStyle = ok ? '#34d399' : 'rgba(251, 191, 36, 0.55)';
+              photoCtx.beginPath();
+              photoCtx.moveTo(res.centerline[i - 1].x, res.centerline[i - 1].y);
+              photoCtx.lineTo(res.centerline[i].x, res.centerline[i].y);
+              photoCtx.stroke();
+            }
+            photoCtx.restore();
+          }
           el('photoHudStatus').textContent = 'Análise concluída';
           el('photoHudAngle').textContent = `${res.angle.toFixed(1)}° ${res.direction}`;
           el('photoHudAngle').classList.remove('hidden');
