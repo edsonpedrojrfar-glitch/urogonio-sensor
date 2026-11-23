@@ -1111,37 +1111,46 @@
         const compMask = new Uint8Array(n);
         for (let k = 0; k < bestCompPixels.length; k++) compMask[bestCompPixels[k]] = 1;
 
-        // Geodesic BFS from border-touching pixels (or bottom-most if not touching border)
+        // Geodesic shortest-path (SPFA circular ring buffer: zero overflow, exact 8-connected distances)
         const geo = new Float32Array(n).fill(-1);
         const parent = new Int32Array(n).fill(-1);
-        let head = 0, tail = 0;
+        const inQueue = new Uint8Array(n);
+        let head = 0, tail = 0, qCount = 0;
+
+        const pushQ = (idx) => {
+          if (inQueue[idx]) return;
+          inQueue[idx] = 1;
+          queue[tail] = idx;
+          tail++;
+          if (tail === n) tail = 0;
+          qCount++;
+        };
+
         for (let k = 0; k < bestCompPixels.length; k++) {
           const idx = bestCompPixels[k];
           const x = idx % w, y = (idx / w) | 0;
           if (x === 0 || x === w - 1 || y === 0 || y === h - 1) {
             geo[idx] = 0;
-            queue[tail++] = idx;
+            pushQ(idx);
           }
         }
-        if (tail === 0) {
-          // Fallback: bottom-most pixel of component
+        if (qCount === 0) {
           let maxYIdx = bestCompPixels[0];
           for (let k = 1; k < bestCompPixels.length; k++) {
             if (((bestCompPixels[k] / w) | 0) > ((maxYIdx / w) | 0)) maxYIdx = bestCompPixels[k];
           }
           geo[maxYIdx] = 0;
-          queue[tail++] = maxYIdx;
+          pushQ(maxYIdx);
         }
 
-        let tipIdx = queue[0];
-        let maxGeo = 0;
-        while (head < tail) {
-          const idx = queue[head++];
+        while (qCount > 0) {
+          const idx = queue[head];
+          head++;
+          if (head === n) head = 0;
+          qCount--;
+          inQueue[idx] = 0;
+
           const gVal = geo[idx];
-          if (gVal > maxGeo && dt[idx] >= 1.5) {
-            maxGeo = gVal;
-            tipIdx = idx;
-          }
           const x = idx % w, y = (idx / w) | 0;
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -1150,20 +1159,32 @@
               if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
               const nb = ny * w + nx;
               if (!compMask[nb]) continue;
-              const step = (dx && dy) ? 1.4142 : 1.0;
-              if (geo[nb] < 0 || gVal + step < geo[nb]) {
-                geo[nb] = gVal + step;
+              const step = (dx && dy) ? 1.41421356 : 1.0;
+              const ng = gVal + step;
+              if (geo[nb] < 0 || ng + 1e-4 < geo[nb]) {
+                geo[nb] = ng;
                 parent[nb] = idx;
-                queue[tail++] = nb;
+                pushQ(nb);
               }
             }
+          }
+        }
+
+        // Compute true global geodesic maximum AFTER convergence (never stale pre-relaxation values)
+        let tipIdx = bestCompPixels[0];
+        let maxGeo = -1;
+        for (let k = 0; k < bestCompPixels.length; k++) {
+          const idx = bestCompPixels[k];
+          if (geo[idx] > maxGeo && dt[idx] >= 1.5) {
+            maxGeo = geo[idx];
+            tipIdx = idx;
           }
         }
 
         // Backtrack geodesic path from tipIdx to border
         const path = [];
         let cur = tipIdx;
-        while (cur >= 0) {
+        while (cur >= 0 && path.length < n) {
           path.push(cur);
           cur = parent[cur];
         }
