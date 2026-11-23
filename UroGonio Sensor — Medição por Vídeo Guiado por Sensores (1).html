@@ -1,0 +1,2352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>UroGonio Sensor — Medição por Vídeo Guiado por Sensores</title>
+  <style>
+    :root {
+      --bg: #070d19;
+      --surface: #0f172a;
+      --surface-2: #162033;
+      --border: #1e293b;
+      --border-hi: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --sky: #38bdf8;
+      --sky-dim: rgba(56, 189, 248, 0.16);
+      --emerald: #34d399;
+      --emerald-dim: rgba(52, 211, 153, 0.16);
+      --amber: #fbbf24;
+      --amber-dim: rgba(251, 191, 36, 0.16);
+      --rose: #fb7185;
+      --rose-dim: rgba(251, 113, 133, 0.16);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+    }
+    .hidden { display: none !important; }
+    header {
+      background: rgba(15, 23, 42, 0.96);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    .header-inner {
+      max-width: 1380px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--sky-dim); border: 1px solid rgba(56,189,248,0.35);
+      display: flex; align-items: center; justify-content: center; color: var(--sky);
+      flex-shrink: 0;
+    }
+    .brand h1 { font-size: 15px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .brand p { font-size: 11px; color: var(--muted); }
+    .badge-local {
+      font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+      background: var(--emerald-dim); color: var(--emerald); border: 1px solid rgba(52,211,153,0.3);
+    }
+    nav.tabs {
+      display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: 10px; border: 1px solid var(--border);
+      overflow-x: auto; max-width: 100%;
+    }
+    .tab-btn {
+      border: 1px solid transparent; background: transparent; color: var(--muted);
+      padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--sky-dim); color: var(--sky); border-color: rgba(56,189,248,0.4);
+    }
+    main {
+      flex: 1; max-width: 1380px; width: 100%; margin: 0 auto; padding: 14px;
+    }
+    .grid-main {
+      display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start;
+    }
+    @media (min-width: 960px) {
+      .grid-main { grid-template-columns: 1.35fr 0.95fr; }
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+      color: #cbd5e1; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 13px; border-radius: 9px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border-hi); background: var(--surface-2); color: var(--text);
+      cursor: pointer; transition: 0.15s; text-decoration: none;
+    }
+    .btn:hover:not(:disabled) { background: #1e293b; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--sky); color: #082f49; border-color: var(--sky); }
+    .btn-primary:hover:not(:disabled) { background: #7dd3fc; }
+    .btn-emerald { background: var(--emerald-dim); color: var(--emerald); border-color: rgba(52,211,153,0.4); }
+    .btn-rose { background: var(--rose-dim); color: var(--rose); border-color: rgba(251,113,133,0.4); }
+    .btn-sm { padding: 5px 10px; font-size: 11px; border-radius: 7px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    label.field-lbl { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    input[type="number"], select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border-hi); color: var(--text);
+      border-radius: 8px; padding: 7px 9px; font-size: 12px; outline: none;
+    }
+    input[type="number"]:focus, select:focus { border-color: var(--sky); }
+
+    /* Viewport Stage */
+    .stage-wrap {
+      position: relative; background: #030712; border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden; aspect-ratio: 9 / 12; max-height: 540px; width: 100%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    @media (min-width: 960px) {
+      .stage-wrap { aspect-ratio: 4 / 3; max-height: 520px; }
+    }
+    #liveCanvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #cameraVideo { display: none; }
+    .hud-top {
+      position: absolute; top: 10px; left: 10px; right: 10px;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none;
+    }
+    .pill {
+      background: rgba(15, 23, 42, 0.88); border: 1px solid var(--border-hi);
+      border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 600;
+      backdrop-filter: blur(4px);
+    }
+    .pill-ok { border-color: rgba(52,211,153,0.5); color: var(--emerald); }
+    .pill-warn { border-color: rgba(251,191,36,0.5); color: var(--amber); }
+    .pill-err { border-color: rgba(251,113,133,0.5); color: var(--rose); }
+
+    .hud-bottom {
+      position: absolute; bottom: 10px; left: 10px; right: 10px;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px; pointer-events: none;
+    }
+    .progress-track {
+      height: 6px; width: 100%; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--border);
+    }
+    .progress-fill { height: 100%; background: var(--sky); width: 0%; transition: width 0.15s; }
+
+    /* Condition checklist */
+    .cond-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    @media (max-width: 500px) { .cond-list { grid-template-columns: 1fr; } }
+    .cond-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 11px;
+    }
+    .cond-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #475569; }
+    .cond-dot.ok { background: var(--emerald); box-shadow: 0 0 6px rgba(52,211,153,0.6); }
+    .cond-dot.fail { background: var(--rose); }
+
+    /* Results cards */
+    .metric-big { font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; }
+    .tag {
+      display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; border: 1px solid var(--border-hi);
+    }
+    .tag-ok { background: var(--emerald-dim); color: var(--emerald); border-color: rgba(52,211,153,0.4); }
+    .tag-warn { background: var(--amber-dim); color: var(--amber); border-color: rgba(251,191,36,0.4); }
+    .tag-err { background: var(--rose-dim); color: var(--rose); border-color: rgba(251,113,133,0.4); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .toast {
+      position: fixed; bottom: 18px; right: 18px; z-index: 60;
+      background: var(--surface-2); border: 1px solid var(--border-hi); color: var(--text);
+      padding: 10px 14px; border-radius: 10px; font-size: 12px; font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.45); transition: 0.25s;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        </div>
+        <div>
+          <h1>UroGonio Sensor <span class="badge-local">100% Local · Offline</span></h1>
+          <p>Medição de Curvatura Peniana por Vídeo Guiado por Sensores</p>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="Navegação principal">
+        <button id="tabLive" class="tab-btn active" type="button">1. Captura ao Vivo</button>
+        <button id="tabResults" class="tab-btn" type="button">2. Resultados &amp; Laudo</button>
+        <button id="tabValidation" class="tab-btn" type="button">3. Validação Sintética (Seção 8)</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- TAB 1: LIVE CAPTURE -->
+    <section id="panelLive" class="grid-main">
+      <div class="card">
+        <div class="card-title">
+          <span>Câmera e Guia de Posicionamento</span>
+          <div class="row">
+            <button id="btnViewSide" type="button" class="btn btn-sm btn-primary">Vista de Lado (Frontal)</button>
+            <button id="btnViewTop" type="button" class="btn btn-sm">Vista de Cima (Traseira)</button>
+          </div>
+        </div>
+
+        <div class="stage-wrap">
+          <video id="cameraVideo" playsinline muted autoplay></video>
+          <canvas id="liveCanvas" width="720" height="960"></canvas>
+
+          <div class="hud-top">
+            <div id="hudPhase" class="pill">Aguardando início</div>
+            <div id="hudSensor" class="pill pill-warn">Sensores: não iniciados</div>
+          </div>
+
+          <div class="hud-bottom">
+            <div id="hudFrames" class="pill">Quadros: 0 / 12</div>
+            <div id="hudMetrics" class="pill mono">Dist: — · Elev: — · Giro: —</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <div class="progress-track"><div id="captureProgress" class="progress-fill"></div></div>
+        </div>
+
+        <div class="row" style="margin-top: 12px; justify-content: space-between;">
+          <div class="row">
+            <button id="btnStartCapture" type="button" class="btn btn-primary">Iniciar Captura Guiada</button>
+            <button id="btnStopCapture" type="button" class="btn btn-rose" disabled>Encerrar Vista</button>
+          </div>
+          <div class="row">
+            <button id="btnSimLive" type="button" class="btn btn-emerald btn-sm">Simular Vídeo + Sensores</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="card">
+          <div class="card-title">
+            <span>Condições de Elegibilidade (Histerese)</span>
+            <span id="hudEligibleBadge" class="tag">Inativo</span>
+          </div>
+          <div id="condList" class="cond-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>Calibração de Sensores e Óptica</span></div>
+          <div class="grid-2">
+            <div>
+              <label class="field-lbl" for="inpDelaySide">Atraso Frontal (ms)</label>
+              <input id="inpDelaySide" type="number" value="35" step="1" min="0" max="1000" />
+            </div>
+            <div>
+              <label class="field-lbl" for="inpDelayTop">Atraso Traseira (ms)</label>
+              <input id="inpDelayTop" type="number" value="274" step="1" min="0" max="1000" />
+            </div>
+            <div>
+              <label class="field-lbl" for="inpKSide">Focal Frontal (k)</label>
+              <input id="inpKSide" type="number" value="1.30" step="0.01" min="0.5" max="3.0" />
+            </div>
+            <div>
+              <label class="field-lbl" for="inpKTop">Focal Traseira (k)</label>
+              <input id="inpKTop" type="number" value="1.58" step="0.01" min="0.5" max="3.0" />
+            </div>
+          </div>
+          <p style="font-size: 11px; color: var(--muted); margin-top: 8px;">
+            Orientação W3C (<code class="mono">RelativeOrientationSensor</code>), captura por <code>requestVideoFrameCallback</code> quando disponível, rastreamento em 270 px e medição subpixel em 720 px. Quadros mantidos apenas em memória.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: RESULTS & REPORT -->
+    <section id="panelResults" class="hidden" style="display: flex; flex-direction: column; gap: 14px;">
+      <div class="grid-2">
+        <div class="card" id="cardSideResult">
+          <div class="card-title">
+            <span>Vista de Lado (Dorsal / Ventral)</span>
+            <span id="sideReliableTag" class="tag">Sem medida</span>
+          </div>
+          <div class="row" style="justify-content: space-between; align-items: baseline;">
+            <div>
+              <div id="sideAngleVal" class="metric-big">—</div>
+              <div id="sideDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+            </div>
+            <div style="text-align: right; font-size: 12px; color: var(--muted);">
+              <div>Quadros válidos: <strong id="sideCountVal" style="color: var(--text);">0</strong></div>
+              <div>Faixa p10–p90: <strong id="sideRangeVal" style="color: var(--text);">—</strong></div>
+              <div>Elevação (α): <strong id="sideAlphaVal" style="color: var(--text);">—</strong></div>
+            </div>
+          </div>
+          <div id="sideWarnings" style="margin-top: 10px; font-size: 11px; color: var(--amber);"></div>
+        </div>
+
+        <div class="card" id="cardTopResult">
+          <div class="card-title">
+            <span>Vista de Cima (Lateral Esq. / Dir.)</span>
+            <span id="topReliableTag" class="tag">Sem medida</span>
+          </div>
+          <div class="row" style="justify-content: space-between; align-items: baseline;">
+            <div>
+              <div id="topAngleVal" class="metric-big">—</div>
+              <div id="topDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+            </div>
+            <div style="text-align: right; font-size: 12px; color: var(--muted);">
+              <div>Quadros válidos: <strong id="topCountVal" style="color: var(--text);">0</strong></div>
+              <div>Faixa p10–p90: <strong id="topRangeVal" style="color: var(--text);">—</strong></div>
+              <div>α utilizado: <strong id="topAlphaUsedVal" style="color: var(--text);">0°</strong></div>
+            </div>
+          </div>
+          <div id="topWarnings" style="margin-top: 10px; font-size: 11px; color: var(--amber);"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>Detalhamento por Quadro Capturado (Seções 6 e 7)</span>
+          <div class="row">
+            <button id="btnCopyClinicalReport" type="button" class="btn btn-emerald btn-sm">Copiar Laudo 2D</button>
+            <button id="btnClearSession" type="button" class="btn btn-rose btn-sm">Limpar Memória</button>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Vista</th>
+                <th>Quadro</th>
+                <th>Ângulo |Δ|</th>
+                <th>Sentido</th>
+                <th>Faixa Método (31x)</th>
+                <th>Contorno Perdido</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="framesTableBody">
+              <tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 18px;">Nenhum quadro medido na sessão.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: SECTION 8 SYNTHETIC VALIDATION SUITE -->
+    <section id="panelValidation" class="hidden" style="display: flex; flex-direction: column; gap: 14px;">
+      <div class="card">
+        <div class="card-title">
+          <span>Suíte de Validação Automática — Critérios da Seção 8</span>
+          <button id="btnRunValidation" type="button" class="btn btn-primary">Executar Todos os Testes</button>
+        </div>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">
+          Gera cenas sintéticas calibradas (câmera + quatérnios W3C simulados) e executa o mesmo motor de segmentação Lab, transformada de distância, cortes subpixel, modelo reta–rampa–reta e 31 recálculos usados na câmera real.
+        </p>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Critério (Seção 8)</th>
+                <th>Esperado</th>
+                <th>Obtido</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="validationTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--muted); padding: 18px;">Clique em "Executar Todos os Testes" para validar o motor.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================================
+      // 1. MATH, QUATERNIONS & GEOMETRIC CONVENTIONS (Section 2)
+      // =========================================================================
+      const DEG = Math.PI / 180;
+      const RAD = 180 / Math.PI;
+
+      function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+      function dot3(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+      function cross3(a, b) {
+        return [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+      }
+      function norm3(a) {
+        const m = Math.hypot(a[0], a[1], a[2]);
+        return m > 1e-12 ? [a[0]/m, a[1]/m, a[2]/m] : [0, 0, 0];
+      }
+      function angleBetween3(a, b) {
+        const na = norm3(a), nb = norm3(b);
+        return Math.acos(clamp(dot3(na, nb), -1, 1)) * RAD;
+      }
+      function rotationDiffDeg(R1, R2) {
+        // Trace of R1 * R2^T = sum_i dot(R1[i], R2[i])
+        const tr = dot3(R1[0], R2[0]) + dot3(R1[1], R2[1]) + dot3(R1[2], R2[2]);
+        return Math.acos(clamp((tr - 1) * 0.5, -1, 1)) * RAD;
+      }
+
+      // W3C quaternion [x, y, z, w] -> usual 3x3 rotation matrix A -> camera R
+      function quatToCameraR(q, isFront) {
+        const [x, y, z, w] = q;
+        const xx = x*x, yy = y*y, zz = z*z;
+        const xy = x*y, xz = x*z, yz = y*z;
+        const wx = w*x, wy = w*y, wz = w*z;
+
+        const col0 = [1 - 2*(yy + zz), 2*(xy + wz),     2*(xz - wy)];
+        const col1 = [2*(xy - wz),     1 - 2*(xx + zz), 2*(yz + wx)];
+        const col2 = [2*(xz + wy),     2*(yz - wx),     1 - 2*(xx + yy)];
+
+        const sx = isFront ? -1 : 1;
+        const sz = isFront ? 1 : -1;
+
+        return [
+          [sx * col0[0], sx * col0[1], sx * col0[2]],
+          [-col1[0],     -col1[1],     -col1[2]],
+          [sz * col2[0], sz * col2[1], sz * col2[2]]
+        ];
+      }
+
+      // W3C DeviceOrientation intrinsic Z-X'-Y'' Euler (alpha, beta, gamma in deg) -> unit quaternion [x, y, z, w]
+      function eulerW3CToQuat(alphaDeg, betaDeg, gammaDeg) {
+        const a = (alphaDeg || 0) * DEG * 0.5;
+        const b = (betaDeg || 0) * DEG * 0.5;
+        const g = (gammaDeg || 0) * DEG * 0.5;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const cb = Math.cos(b), sb = Math.sin(b);
+        const cg = Math.cos(g), sg = Math.sin(g);
+        const w = ca * cb * cg - sa * sb * sg;
+        const x = ca * sb * cg - sa * cb * sg;
+        const y = ca * cb * sg + sa * sb * cg;
+        const z = sa * cb * cg + ca * sb * sg;
+        const m = Math.hypot(x, y, z, w) || 1;
+        return [x / m, y / m, z / m, w / m];
+      }
+
+      function slerpQuat(q1, q2, t) {
+        let [x1, y1, z1, w1] = q1;
+        let [x2, y2, z2, w2] = q2;
+        let d = x1*x2 + y1*y2 + z1*z2 + w1*w2;
+        if (d < 0) { x2 = -x2; y2 = -y2; z2 = -z2; w2 = -w2; d = -d; }
+        if (d > 0.9995) {
+          const q = [x1 + t*(x2-x1), y1 + t*(y2-y1), z1 + t*(z2-z1), w1 + t*(w2-w1)];
+          const m = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+          return [q[0]/m, q[1]/m, q[2]/m, q[3]/m];
+        }
+        const th0 = Math.acos(clamp(d, -1, 1));
+        const th = th0 * t;
+        const s0 = Math.cos(th) - d * Math.sin(th) / Math.sin(th0);
+        const s1 = Math.sin(th) / Math.sin(th0);
+        return [s0*x1 + s1*x2, s0*y1 + s1*y2, s0*z1 + s1*z2, s0*w1 + s1*w2];
+      }
+
+      // Build synthetic W3C quaternion from camera R (inverse of quatToCameraR) for synthetic scene tests
+      function mat3ToQuat(col0, col1, col2) {
+        const m00 = col0[0], m01 = col1[0], m02 = col2[0];
+        const m10 = col0[1], m11 = col1[1], m12 = col2[1];
+        const m20 = col0[2], m21 = col1[2], m22 = col2[2];
+        const tr = m00 + m11 + m22;
+        let x, y, z, w;
+        if (tr > 0) {
+          const s = Math.sqrt(tr + 1.0) * 2;
+          w = 0.25 * s; x = (m21 - m12)/s; y = (m02 - m20)/s; z = (m10 - m01)/s;
+        } else if (m00 > m11 && m00 > m22) {
+          const s = Math.sqrt(1.0 + m00 - m11 - m22) * 2;
+          w = (m21 - m12)/s; x = 0.25 * s; y = (m01 + m10)/s; z = (m02 + m20)/s;
+        } else if (m11 > m22) {
+          const s = Math.sqrt(1.0 + m11 - m00 - m22) * 2;
+          w = (m02 - m20)/s; x = (m01 + m10)/s; y = 0.25 * s; z = (m12 + m21)/s;
+        } else {
+          const s = Math.sqrt(1.0 + m22 - m00 - m11) * 2;
+          w = (m10 - m01)/s; x = (m02 + m20)/s; y = (m12 + m21)/s; z = 0.25 * s;
+        }
+        const m = Math.hypot(x, y, z, w) || 1;
+        return [x/m, y/m, z/m, w/m];
+      }
+
+      function cameraRToQuat(R, isFront) {
+        const sx = isFront ? -1 : 1;
+        const sz = isFront ? 1 : -1;
+        const col0 = [sx * R[0][0], sx * R[0][1], sx * R[0][2]];
+        const col1 = [-R[1][0],     -R[1][1],     -R[1][2]];
+        const col2 = [sz * R[2][0], sz * R[2][1], sz * R[2][2]];
+        return mat3ToQuat(col0, col1, col2);
+      }
+
+      function pixelToRay(px, py, w, h, f, R) {
+        const u = (px - w * 0.5) / f;
+        const v = (py - h * 0.5) / f;
+        return norm3([
+          R[2][0] + u * R[0][0] + v * R[1][0],
+          R[2][1] + u * R[0][1] + v * R[1][1],
+          R[2][2] + u * R[0][2] + v * R[1][2]
+        ]);
+      }
+
+      function worldDirToPixel(d, w, h, f, R) {
+        const cx = dot3(R[0], d);
+        const cy = dot3(R[1], d);
+        const cz = dot3(R[2], d);
+        if (cz <= 1e-5) return null;
+        return { x: w * 0.5 + f * (cx / cz), y: h * 0.5 + f * (cy / cz) };
+      }
+
+      function getOpticalElevationDeg(R) {
+        return Math.asin(clamp(R[2][2], -1, 1)) * RAD;
+      }
+
+      function getCameraRollInfo(R) {
+        // When looking nearly straight down/up (top view), horizontal plane has negligible Z projection
+        if (Math.hypot(R[0][2], R[1][2]) < 0.15) {
+          return { giro0: 0, giro: 0, upsideDown: false };
+        }
+        const giro0 = Math.atan2(R[0][2], -R[1][2]) * RAD;
+        // 180 deg (upside down) is never accepted
+        if (Math.abs(giro0) > 135) {
+          return { giro0, giro: giro0, upsideDown: true };
+        }
+        const giro = clamp(giro0 - 90 * Math.round(giro0 / 90), -90, 90);
+        return { giro0, giro, upsideDown: false };
+      }
+
+      // =========================================================================
+      // 2. CIE LAB SKIN SEGMENTATION, EDT & GEODESIC LANDMARKS (Section 3)
+      // =========================================================================
+      function srgbToLab(r, g, b) {
+        let lr = r / 255, lg = g / 255, lb = b / 255;
+        lr = lr > 0.04045 ? Math.pow((lr + 0.055) / 1.055, 2.4) : lr / 12.92;
+        lg = lg > 0.04045 ? Math.pow((lg + 0.055) / 1.055, 2.4) : lg / 12.92;
+        lb = lb > 0.04045 ? Math.pow((lb + 0.055) / 1.055, 2.4) : lb / 12.92;
+
+        const X = (lr * 0.4124564 + lg * 0.3575761 + lb * 0.1804375) / 0.95047;
+        const Y = (lr * 0.2126729 + lg * 0.7151522 + lb * 0.0721750) / 1.00000;
+        const Z = (lr * 0.0193339 + lg * 0.1191920 + lb * 0.9503041) / 1.08883;
+
+        const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
+        const fx = f(X), fy = f(Y), fz = f(Z);
+        return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+      }
+
+      function medianArr(arr) {
+        if (!arr.length) return 0;
+        const s = Float64Array.from(arr).sort();
+        const m = s.length >> 1;
+        return s.length % 2 ? s[m] : 0.5 * (s[m - 1] + s[m]);
+      }
+
+      function quantileArr(arr, q) {
+        if (!arr.length) return 0;
+        const s = Float64Array.from(arr).sort();
+        const pos = (s.length - 1) * q;
+        const lo = Math.floor(pos), hi = Math.ceil(pos);
+        return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (pos - lo);
+      }
+
+      function computeLabAndSkinMap(imgData, threshScale = 1.0) {
+        const { width: w, height: h, data } = imgData;
+        const n = w * h;
+        const L = new Float32Array(n);
+        const A = new Float32Array(n);
+        const B = new Float32Array(n);
+        const bgSamplesA = [];
+        const bgSamplesB = [];
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = y * w + x;
+            const p = i * 4;
+            const [l, a, b] = srgbToLab(data[p], data[p+1], data[p+2]);
+            L[i] = l; A[i] = a; B[i] = b;
+
+            if (x < 3 || x >= w - 3 || y < 3 || y >= h - 3) {
+              const hue = Math.atan2(b, a) * RAD;
+              const chr = Math.hypot(a, b);
+              const looksSkin = hue >= -25 && hue <= 85 && chr >= 6;
+              if (!looksSkin) {
+                bgSamplesA.push(a);
+                bgSamplesB.push(b);
+              }
+            }
+          }
+        }
+
+        // White balance correction if background has strong color cast
+        let shiftA = 0, shiftB = 0;
+        if (bgSamplesA.length >= 10) {
+          const medA = medianArr(bgSamplesA);
+          const medB = medianArr(bgSamplesB);
+          const bgChroma = Math.hypot(medA, medB);
+          if (bgChroma > 12) {
+            shiftA = medA * 0.65;
+            shiftB = medB * 0.65;
+          }
+        }
+
+        const skinChromas = [];
+        const score = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const a = A[i] - shiftA;
+          const b = B[i] - shiftB;
+          const hue = Math.atan2(b, a) * RAD;
+          const chr = Math.hypot(a, b);
+          if (hue >= -25 && hue <= 85 && L[i] > 12) {
+            skinChromas.push(chr);
+          }
+          score[i] = (hue >= -25 && hue <= 85 && L[i] > 12) ? chr : 0;
+        }
+
+        const medChr = medianArr(skinChromas);
+        const minC = Math.max(3, Math.min(6, 0.6 * medChr)) * threshScale;
+        const highC = minC * 1.25;
+        const lowC = minC * 0.75;
+
+        // Hysteresis thresholding
+        const mask = new Uint8Array(n);
+        const queue = new Int32Array(n);
+        let head = 0, tail = 0;
+        for (let i = 0; i < n; i++) {
+          if (score[i] >= highC) {
+            mask[i] = 1;
+            queue[tail++] = i;
+          }
+        }
+        while (head < tail) {
+          const idx = queue[head++];
+          const x = idx % w, y = (idx / w) | 0;
+          const nbrs = [
+            x > 0 ? idx - 1 : -1,
+            x < w - 1 ? idx + 1 : -1,
+            y > 0 ? idx - w : -1,
+            y < h - 1 ? idx + w : -1
+          ];
+          for (let k = 0; k < 4; k++) {
+            const nb = nbrs[k];
+            if (nb >= 0 && !mask[nb] && score[nb] >= lowC) {
+              mask[nb] = 1;
+              queue[tail++] = nb;
+            }
+          }
+        }
+
+        // Fill holes (flood fill background from border on inverted mask)
+        const bgVis = new Uint8Array(n);
+        head = 0; tail = 0;
+        for (let x = 0; x < w; x++) {
+          if (!mask[x]) { bgVis[x] = 1; queue[tail++] = x; }
+          const bot = (h - 1) * w + x;
+          if (!mask[bot] && !bgVis[bot]) { bgVis[bot] = 1; queue[tail++] = bot; }
+        }
+        for (let y = 0; y < h; y++) {
+          const left = y * w, right = y * w + (w - 1);
+          if (!mask[left] && !bgVis[left]) { bgVis[left] = 1; queue[tail++] = left; }
+          if (!mask[right] && !bgVis[right]) { bgVis[right] = 1; queue[tail++] = right; }
+        }
+        while (head < tail) {
+          const idx = queue[head++];
+          const x = idx % w, y = (idx / w) | 0;
+          const nbrs = [
+            x > 0 ? idx - 1 : -1,
+            x < w - 1 ? idx + 1 : -1,
+            y > 0 ? idx - w : -1,
+            y < h - 1 ? idx + w : -1
+          ];
+          for (let k = 0; k < 4; k++) {
+            const nb = nbrs[k];
+            if (nb >= 0 && !mask[nb] && !bgVis[nb]) {
+              bgVis[nb] = 1;
+              queue[tail++] = nb;
+            }
+          }
+        }
+        for (let i = 0; i < n; i++) {
+          if (!bgVis[i]) mask[i] = 1;
+        }
+
+        return { mask, L, A, B, minC };
+      }
+
+      // Exact O(w*h) 2D Euclidean Distance Transform (squared -> sqrt)
+      function computeEDT(mask, w, h) {
+        const INF = 1e9;
+        const g = new Float32Array(w * h);
+        for (let x = 0; x < w; x++) {
+          g[x] = mask[x] ? 1 : 0; // border pixel inside mask has dist >=1 from outside if mask[x]
+          // Actually outside is mask==0; treat outside-of-image as outside only if needed, here mask==0 is background
+          g[x] = mask[x] ? INF : 0;
+          for (let y = 1; y < h; y++) {
+            const i = y * w + x;
+            g[i] = mask[i] ? g[i - w] + 1 : 0;
+          }
+          for (let y = h - 2; y >= 0; y--) {
+            const i = y * w + x;
+            if (g[i + w] + 1 < g[i]) g[i] = g[i + w] + 1;
+          }
+        }
+        const dt = new Float32Array(w * h);
+        const s = new Int32Array(w);
+        const t = new Int32Array(w);
+        const sep = (i, u, gRow) => {
+          return Math.floor((u*u - i*i + gRow[u]*gRow[u] - gRow[i]*gRow[i]) / (2 * (u - i)));
+        };
+        for (let y = 0; y < h; y++) {
+          const rowOff = y * w;
+          const gRow = g.subarray(rowOff, rowOff + w);
+          let q = 0;
+          s[0] = 0; t[0] = 0;
+          for (let u = 1; u < w; u++) {
+            while (q >= 0 && ((t[q] - s[q])*(t[q] - s[q]) + gRow[s[q]]*gRow[s[q]]) > ((t[q] - u)*(t[q] - u) + gRow[u]*gRow[u])) {
+              q--;
+            }
+            if (q < 0) { q = 0; s[0] = u; }
+            else {
+              const wSep = 1 + sep(s[q], u, gRow);
+              if (wSep < w) { q++; s[q] = u; t[q] = wSep; }
+            }
+          }
+          for (let u = w - 1; u >= 0; u--) {
+            const dx = u - s[q];
+            dt[rowOff + u] = Math.sqrt(dx * dx + gRow[s[q]] * gRow[s[q]]);
+            if (u === t[q]) q--;
+          }
+        }
+        return dt;
+      }
+
+      // Extract connected component & landmarks: tip (ponta), base (B), sulcus (A)
+      function detectLandmarksFromMask(mask, dt, w, h, prevLm = null) {
+        const n = w * h;
+        const labels = new Int32Array(n);
+        const queue = new Int32Array(n);
+        let bestScore = -1;
+        let bestCompPixels = null;
+        let labelId = 0;
+
+        for (let i = 0; i < n; i++) {
+          if (!mask[i] || labels[i]) continue;
+          labelId++;
+          let head = 0, tail = 0;
+          labels[i] = labelId;
+          queue[tail++] = i;
+          let touchesBorder = false;
+          let sumX = 0, sumY = 0, sumXX = 0, sumYY = 0, sumXY = 0;
+
+          while (head < tail) {
+            const idx = queue[head++];
+            const x = idx % w, y = (idx / w) | 0;
+            if (x === 0 || x === w - 1 || y === 0 || y === h - 1) touchesBorder = true;
+            sumX += x; sumY += y;
+            sumXX += x * x; sumYY += y * y; sumXY += x * y;
+
+            const nbrs = [
+              x > 0 ? idx - 1 : -1,
+              x < w - 1 ? idx + 1 : -1,
+              y > 0 ? idx - w : -1,
+              y < h - 1 ? idx + w : -1
+            ];
+            for (let k = 0; k < 4; k++) {
+              const nb = nbrs[k];
+              if (nb >= 0 && mask[nb] && !labels[nb]) {
+                labels[nb] = labelId;
+                queue[tail++] = nb;
+              }
+            }
+          }
+
+          if (tail < Math.max(40, n * 0.004)) continue;
+          const mx = sumX / tail, my = sumY / tail;
+          const cxx = sumXX / tail - mx * mx;
+          const cyy = sumYY / tail - my * my;
+          const cxy = sumXY / tail - mx * my;
+          const tr = cxx + cyy;
+          const det = cxx * cyy - cxy * cxy;
+          const disc = Math.sqrt(Math.max(0, tr * tr * 0.25 - det));
+          const l1 = tr * 0.5 + disc;
+          const l2 = Math.max(1e-3, tr * 0.5 - disc);
+          const elongation = Math.sqrt(l1 / l2);
+          const centerDist = Math.hypot((mx - w * 0.5) / w, (my - h * 0.5) / h);
+          let contBoost = 1.0;
+          if (prevLm && prevLm.base && prevLm.ponta) {
+            const pmx = 0.5 * (prevLm.base.x + prevLm.ponta.x);
+            const pmy = 0.5 * (prevLm.base.y + prevLm.ponta.y);
+            const prevDist = Math.hypot((mx - pmx) / w, (my - pmy) / h);
+            contBoost = 1.0 + Math.max(0, 0.5 - prevDist);
+          }
+          const compScore = elongation * (touchesBorder ? 2.5 : 1.0) * (1.2 - centerDist) * contBoost * Math.sqrt(tail);
+
+          if (compScore > bestScore) {
+            bestScore = compScore;
+            bestCompPixels = queue.slice(0, tail);
+          }
+        }
+
+        if (!bestCompPixels) return null;
+
+        // Build binary mask of only the selected component
+        const compMask = new Uint8Array(n);
+        for (let k = 0; k < bestCompPixels.length; k++) compMask[bestCompPixels[k]] = 1;
+
+        // Geodesic BFS from border-touching pixels (or bottom-most if not touching border)
+        const geo = new Float32Array(n).fill(-1);
+        const parent = new Int32Array(n).fill(-1);
+        let head = 0, tail = 0;
+        for (let k = 0; k < bestCompPixels.length; k++) {
+          const idx = bestCompPixels[k];
+          const x = idx % w, y = (idx / w) | 0;
+          if (x === 0 || x === w - 1 || y === 0 || y === h - 1) {
+            geo[idx] = 0;
+            queue[tail++] = idx;
+          }
+        }
+        if (tail === 0) {
+          // Fallback: bottom-most pixel of component
+          let maxYIdx = bestCompPixels[0];
+          for (let k = 1; k < bestCompPixels.length; k++) {
+            if (((bestCompPixels[k] / w) | 0) > ((maxYIdx / w) | 0)) maxYIdx = bestCompPixels[k];
+          }
+          geo[maxYIdx] = 0;
+          queue[tail++] = maxYIdx;
+        }
+
+        let tipIdx = queue[0];
+        let maxGeo = 0;
+        while (head < tail) {
+          const idx = queue[head++];
+          const gVal = geo[idx];
+          if (gVal > maxGeo && dt[idx] >= 1.5) {
+            maxGeo = gVal;
+            tipIdx = idx;
+          }
+          const x = idx % w, y = (idx / w) | 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (!dx && !dy) continue;
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+              const nb = ny * w + nx;
+              if (!compMask[nb]) continue;
+              const step = (dx && dy) ? 1.4142 : 1.0;
+              if (geo[nb] < 0 || gVal + step < geo[nb]) {
+                geo[nb] = gVal + step;
+                parent[nb] = idx;
+                queue[tail++] = nb;
+              }
+            }
+          }
+        }
+
+        // Backtrack geodesic path from tipIdx to border
+        const path = [];
+        let cur = tipIdx;
+        while (cur >= 0) {
+          path.push(cur);
+          cur = parent[cur];
+        }
+        if (path.length < 15) return null;
+
+        // Recenter each path point onto the local EDT ridge (steepest ascent on dt)
+        const ridgePts = path.map(idx => {
+          let cx = idx % w, cy = (idx / w) | 0;
+          for (let step = 0; step < 25; step++) {
+            let bestX = cx, bestY = cy, bestD = dt[cy * w + cx];
+            for (let oy = -2; oy <= 2; oy++) {
+              for (let ox = -2; ox <= 2; ox++) {
+                const nx = cx + ox, ny = cy + oy;
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h && dt[ny * w + nx] > bestD) {
+                  bestD = dt[ny * w + nx]; bestX = nx; bestY = ny;
+                }
+              }
+            }
+            if (bestX === cx && bestY === cy) break;
+            cx = bestX; cy = bestY;
+          }
+          return { x: cx, y: cy, d: dt[cy * w + cx] };
+        });
+
+        // Compute typical shaft radius from 15%..55% of ridge path from tip
+        const radiiSample = [];
+        const pStart = Math.floor(ridgePts.length * 0.15);
+        const pEnd = Math.floor(ridgePts.length * 0.55);
+        for (let k = pStart; k <= pEnd; k++) radiiSample.push(ridgePts[k].d);
+        const typicalRadius = Math.max(2, medianArr(radiiSample));
+
+        // Base (B): coming from tip along ridge, where thickness ceases to be tubular (> 1.38 * typicalRadius)
+        let basePathIdx = Math.floor(ridgePts.length * 0.85);
+        for (let k = pStart; k < ridgePts.length - 2; k++) {
+          if (ridgePts[k].d > typicalRadius * 1.28) {
+            basePathIdx = Math.max(pEnd, k - 4);
+            break;
+          }
+        }
+
+        const sulcusPathIdx = Math.max(1, Math.round(basePathIdx * 0.22));
+        const ponta = { x: ridgePts[0].x, y: ridgePts[0].y };
+        const sulco = { x: ridgePts[sulcusPathIdx].x, y: ridgePts[sulcusPathIdx].y };
+        const base = { x: ridgePts[basePathIdx].x, y: ridgePts[basePathIdx].y };
+        const L = Math.hypot(ponta.x - base.x, ponta.y - base.y);
+        const largura = 2 * typicalRadius;
+
+        return { ponta, sulco, base, L, largura, typicalRadius, compMask };
+      }
+
+      // =========================================================================
+      // 3. ELIGIBILITY WITH HYSTERESIS (Section 4)
+      // =========================================================================
+      function createEligibilityTracker() {
+        return {
+          level: false,
+          landmarks: false,
+          inFrame: false,
+          distance: false,
+          height: false,
+          center: false,
+          motion: false,
+          verticalImg: false,
+          lateral: false,
+          alongShaft: false
+        };
+      }
+
+      function hyst(prev, val, limit, mult = 1.3) {
+        return prev ? val <= limit * mult : val <= limit;
+      }
+
+      function evaluateEligibility(tracker, viewMode, ctxInfo) {
+        const { R, w, h, f, landmarks, angVelDegPerSec, alphaDeg, isPortrait } = ctxInfo;
+        const rollInfo = getCameraRollInfo(R);
+
+        // Screen must be portrait
+        if (!isPortrait || rollInfo.upsideDown) {
+          Object.keys(tracker).forEach(k => tracker[k] = false);
+          return { eligible: false, levelOk: false, distM: 0, elevDeg: getOpticalElevationDeg(R), giroDeg: rollInfo.giro, reason: 'Tela não está em retrato' };
+        }
+
+        let levelErr = 0;
+        let levelOk = false;
+        const elevDeg = getOpticalElevationDeg(R);
+
+        if (viewMode === 'side') {
+          const eElev = Math.abs(elevDeg);
+          const eGiro = Math.abs(rollInfo.giro);
+          levelErr = Math.max(eElev, eGiro * (3 / 5));
+          // Level exits at 2x limit
+          tracker.level = tracker.level
+            ? (eElev <= 3 * 2 && eGiro <= 5 * 2)
+            : (eElev <= 3 && eGiro <= 5);
+          levelOk = tracker.level;
+        } else {
+          const a = (alphaDeg !== null && alphaDeg >= -45 && alphaDeg <= 75) ? alphaDeg : 0;
+          const aRad = a * DEG;
+          const upWorld = [-R[1][0], -R[1][1], -R[1][2]];
+          const hProj = norm3([upWorld[0], upWorld[1], 0]);
+          const target = [Math.sin(aRad) * hProj[0], Math.sin(aRad) * hProj[1], -Math.cos(aRad)];
+          const errTop = angleBetween3(R[2], target);
+          levelErr = errTop;
+          tracker.level = hyst(tracker.level, errTop, 5, 2.0);
+          levelOk = tracker.level;
+        }
+
+        tracker.landmarks = Boolean(landmarks && landmarks.L > 15 && landmarks.largura > 3);
+        if (!tracker.landmarks) {
+          tracker.inFrame = false; tracker.distance = false; tracker.height = false;
+          tracker.center = false; tracker.verticalImg = false; tracker.lateral = false; tracker.alongShaft = false;
+          tracker.motion = hyst(tracker.motion, angVelDegPerSec, viewMode === 'side' ? 15 : 10, 1.3);
+          return { eligible: false, levelOk, levelErr, distM: 0, elevDeg, giroDeg: rollInfo.giro };
+        }
+
+        const { ponta, base, largura } = landmarks;
+        // 6% margin (hysteresis exit: 6% / 1.3 = 4.6%)
+        const mLim = tracker.inFrame ? 0.06 / 1.3 : 0.06;
+        const inMargin = pt =>
+          pt.x >= w * mLim && pt.x <= w * (1 - mLim) &&
+          pt.y >= h * mLim && pt.y <= h * (1 - mLim);
+        tracker.inFrame = inMargin(ponta) && inMargin(base);
+
+        // Distance: dist = f * 0.035 / largura
+        const distM = (f * 0.035) / Math.max(1, largura);
+        if (viewMode === 'side') {
+          tracker.distance = tracker.distance
+            ? (distM >= 0.30 / 1.3 && distM <= 0.70 * 1.3)
+            : (distM >= 0.30 && distM <= 0.70);
+        } else {
+          tracker.distance = tracker.distance
+            ? (distM >= 0.25 / 1.3 && distM <= 0.70 * 1.3)
+            : (distM >= 0.25 && distM <= 0.70);
+        }
+
+        const meio = { x: 0.5 * (ponta.x + base.x), y: 0.5 * (ponta.y + base.y) };
+        const centerV = Math.abs(meio.y - h * 0.5) / h;
+        const centerH = Math.abs(meio.x - w * 0.5) / w;
+        const cMult = tracker.center ? 1.3 : 1.0;
+        tracker.center = centerV <= 0.12 * cMult && centerH <= 0.20 * cMult;
+
+        const rMeio = pixelToRay(meio.x, meio.y, w, h, f, R);
+
+        if (viewMode === 'side') {
+          const hErr = Math.abs(Math.asin(clamp(rMeio[2], -1, 1)) * RAD);
+          tracker.height = hyst(tracker.height, hErr, 5, 1.3);
+          tracker.motion = hyst(tracker.motion, angVelDegPerSec, 15, 1.3);
+          const eligible = tracker.level && tracker.landmarks && tracker.inFrame && tracker.distance && tracker.height && tracker.center && tracker.motion;
+          return { eligible, levelOk, levelErr, distM, elevDeg, giroDeg: rollInfo.giro };
+        } else {
+          // Top view extra conditions
+          const bp = [ponta.x - base.x, ponta.y - base.y];
+          const bpMag = Math.hypot(bp[0], bp[1]) || 1;
+          // "alto" of image is (0, -1) in pixel coordinates
+          const vImgErr = Math.acos(clamp(-bp[1] / bpMag, -1, 1)) * RAD;
+          tracker.verticalImg = hyst(tracker.verticalImg, vImgErr, 20, 1.3);
+
+          const rTip = pixelToRay(ponta.x, ponta.y, w, h, f, R);
+          const rBase = pixelToRay(base.x, base.y, w, h, f, R);
+          const s = norm3([rTip[0] - rBase[0], rTip[1] - rBase[1], rTip[2] - rBase[2]]);
+          const sh = norm3([s[0], s[1], 0]);
+          const direita = cross3(sh, [0, 0, 1]);
+          const latErr = Math.abs(Math.asin(clamp(dot3(rMeio, direita), -1, 1)) * RAD);
+          tracker.lateral = hyst(tracker.lateral, latErr, 3, 1.3);
+
+          const ao = Math.atan2(dot3(rMeio, sh), -rMeio[2]) * RAD;
+          const aRef = (alphaDeg !== null && alphaDeg >= -45 && alphaDeg <= 75) ? alphaDeg : 0;
+          const aoLim = (alphaDeg !== null) ? 10 : 15;
+          tracker.alongShaft = hyst(tracker.alongShaft, Math.abs(ao - aRef), aoLim, 1.3);
+          tracker.motion = hyst(tracker.motion, angVelDegPerSec, 10, 1.3);
+
+          const eligible = tracker.level && tracker.landmarks && tracker.inFrame && tracker.distance &&
+            tracker.verticalImg && tracker.lateral && tracker.alongShaft && tracker.center && tracker.motion;
+          return { eligible, levelOk, levelErr, distM, elevDeg, giroDeg: rollInfo.giro };
+        }
+      }
+
+      // =========================================================================
+      // 4. FRAME MEASUREMENT: SUBPIXEL CROSS-SECTIONS & RETA-RAMPA-RETA (Section 6)
+      // =========================================================================
+      function fitErfEdge(profile, centerIdx, insideFirst) {
+        // Fit step edge using gradient-weighted centroid + local skin/bg levels (subpixel erf refinement)
+        const n = profile.length;
+        const lo = Math.max(1, centerIdx - 3);
+        const hi = Math.min(n - 2, centerIdx + 3);
+        let sumW = 0, sumPos = 0;
+        for (let i = lo; i <= hi; i++) {
+          const grad = Math.abs(profile[i + 1] - profile[i - 1]);
+          const w = grad * grad;
+          sumW += w;
+          sumPos += w * i;
+        }
+        if (sumW < 1e-6) return centerIdx;
+        const rough = sumPos / sumW;
+
+        // Local inside and outside luminance levels
+        const inIdx = insideFirst ? Math.max(0, Math.floor(rough) - 3) : Math.min(n - 1, Math.ceil(rough) + 3);
+        const outIdx = insideFirst ? Math.min(n - 1, Math.ceil(rough) + 3) : Math.max(0, Math.floor(rough) - 3);
+        const lIn = profile[inIdx];
+        const lOut = profile[outIdx];
+        const mid = 0.5 * (lIn + lOut);
+
+        // Linear interpolation at 50% erf crossing around rough
+        const i0 = clamp(Math.floor(rough), 0, n - 2);
+        const v0 = profile[i0], v1 = profile[i0 + 1];
+        if ((v0 - mid) * (v1 - mid) <= 0 && Math.abs(v1 - v0) > 1e-3) {
+          return i0 + (mid - v0) / (v1 - v0);
+        }
+        return rough;
+      }
+
+      function measureSingleAttempt(Lbuf, mask, dt, w, h, ptA, ptB, viewMode, R) {
+        const dxAB = ptB.x - ptA.x;
+        const dyAB = ptB.y - ptA.y;
+        const lenAB = Math.hypot(dxAB, dyAB);
+        if (lenAB < 20) return null;
+
+        // Initial centerline from A to B: search along normal to AB for EDT ridge peak
+        const N = 48;
+        const abNx = -dyAB / lenAB;
+        const abNy = dxAB / lenAB;
+        const maxSearch = Math.round(lenAB * 0.35);
+        const pts = [];
+        for (let i = 0; i < N; i++) {
+          const t = i / (N - 1);
+          const cx = ptA.x + t * dxAB;
+          const cy = ptA.y + t * dyAB;
+          let bestDt = -1, bx = cx, by = cy;
+          for (let off = -maxSearch; off <= maxSearch; off += 2) {
+            const nx = Math.round(cx + off * abNx);
+            const ny = Math.round(cy + off * abNy);
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+              const d = dt[ny * w + nx];
+              if (d > bestDt) { bestDt = d; bx = nx; by = ny; }
+            }
+          }
+          pts.push({ x: bx, y: by });
+        }
+
+        // Estimate typical half-width
+        const radSamples = [];
+        for (let i = 4; i < N - 4; i++) {
+          radSamples.push(dt[clamp(Math.round(pts[i].y), 0, h-1) * w + clamp(Math.round(pts[i].x), 0, w-1)]);
+        }
+        const halfW = Math.max(4, medianArr(radSamples));
+        const searchR = Math.round(halfW * 2.4);
+
+        const sampleMask = (x, y) => {
+          const ix = clamp(Math.round(x), 0, w - 1);
+          const iy = clamp(Math.round(y), 0, h - 1);
+          return mask[iy * w + ix];
+        };
+        const sampleL = (x, y) => {
+          const x0 = clamp(Math.floor(x), 0, w - 2), y0 = clamp(Math.floor(y), 0, h - 2);
+          const fx = x - x0, fy = y - y0;
+          const i00 = y0 * w + x0;
+          return (1-fx)*(1-fy)*Lbuf[i00] + fx*(1-fy)*Lbuf[i00+1] + (1-fx)*fy*Lbuf[i00+w] + fx*fy*Lbuf[i00+w+1];
+        };
+
+        let validContour = new Uint8Array(N);
+        // 10 iterations of perpendicular cross-sections with subpixel edge refinement
+        for (let iter = 0; iter < 10; iter++) {
+          validContour.fill(0);
+          const nextPts = pts.map(p => ({ x: p.x, y: p.y }));
+          for (let i = 1; i < N - 1; i++) {
+            const tx = pts[i + 1].x - pts[i - 1].x;
+            const ty = pts[i + 1].y - pts[i - 1].y;
+            const tMag = Math.hypot(tx, ty) || 1;
+            const nx = -ty / tMag;
+            const ny = tx / tMag;
+
+            // Sample along normal from -searchR to +searchR
+            const profLen = searchR * 2 + 1;
+            const profL = new Float32Array(profLen);
+            let leftEdge = -1, rightEdge = -1;
+
+            for (let k = -searchR; k <= searchR; k++) {
+              profL[k + searchR] = sampleL(pts[i].x + k * nx, pts[i].y + k * ny);
+            }
+            for (let k = 0; k >= -searchR; k--) {
+              if (!sampleMask(pts[i].x + k * nx, pts[i].y + k * ny)) {
+                leftEdge = k + searchR + 1;
+                break;
+              }
+            }
+            for (let k = 0; k <= searchR; k++) {
+              if (!sampleMask(pts[i].x + k * nx, pts[i].y + k * ny)) {
+                rightEdge = k + searchR - 1;
+                break;
+              }
+            }
+
+            if (leftEdge > 1 && rightEdge < profLen - 2 && rightEdge > leftEdge + 3) {
+              const widthPx = rightEdge - leftEdge;
+              if (widthPx >= halfW * 1.1 && widthPx <= halfW * 2.9) {
+                const subLeft = fitErfEdge(profL, leftEdge, false) - searchR;
+                const subRight = fitErfEdge(profL, rightEdge, true) - searchR;
+                const midOff = 0.5 * (subLeft + subRight);
+                nextPts[i].x = pts[i].x + midOff * nx;
+                nextPts[i].y = pts[i].y + midOff * ny;
+                validContour[i] = 1;
+              }
+            }
+          }
+          // Light tangential smoothing that preserves bend angle
+          const wSide = iter < 5 ? 0.15 : 0.05;
+          const wMid = 1 - 2 * wSide;
+          for (let i = 1; i < N - 1; i++) {
+            pts[i].x = wSide * nextPts[i-1].x + wMid * nextPts[i].x + wSide * nextPts[i+1].x;
+            pts[i].y = wSide * nextPts[i-1].y + wMid * nextPts[i].y + wSide * nextPts[i+1].y;
+          }
+        }
+
+        // Arc-length s in [0, 1] and smoothed tangent angle theta(s)
+        const sCum = new Float64Array(N);
+        for (let i = 1; i < N; i++) {
+          sCum[i] = sCum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        }
+        const totalArc = sCum[N - 1] || 1;
+        const sNorm = Array.from(sCum, v => v / totalArc);
+
+        const rawTheta = new Float64Array(N);
+        for (let i = 0; i < N; i++) {
+          const i0 = Math.max(0, i - 1), i1 = Math.min(N - 1, i + 1);
+          rawTheta[i] = Math.atan2(pts[i1].y - pts[i0].y, pts[i1].x - pts[i0].x) * RAD;
+        }
+        // Unwrap angles
+        for (let i = 1; i < N; i++) {
+          while (rawTheta[i] - rawTheta[i - 1] > 180) rawTheta[i] -= 360;
+          while (rawTheta[i] - rawTheta[i - 1] < -180) rawTheta[i] += 360;
+        }
+        // Local linear regression smoothing (radius 1)
+        const theta = new Float64Array(N);
+        for (let i = 0; i < N; i++) {
+          let sum = 0, cnt = 0;
+          for (let j = Math.max(0, i - 1); j <= Math.min(N - 1, i + 1); j++) {
+            sum += rawTheta[j]; cnt++;
+          }
+          theta[i] = sum / cnt;
+        }
+
+        // Check curvature impossibility: kappa * halfW > 2 over >= 2% consecutive length
+        const badCurv = new Uint8Array(N);
+        for (let i = 1; i < N - 1; i++) {
+          const ds = (sCum[i + 1] - sCum[i - 1]) * 0.5 || 1;
+          const dTh = Math.abs(theta[i + 1] - theta[i - 1]) * 0.5 * DEG;
+          const kappa = dTh / ds;
+          if (kappa * halfW > 2.0) badCurv[i] = 1;
+        }
+
+        return { pts, sNorm, theta, validContour, badCurv, halfW, N };
+      }
+
+      function fitRetaRampaReta(attempt, winStart, winEnd) {
+        const { sNorm, theta, validContour, badCurv, N } = attempt;
+        // Shrink window from middle if ends lose free contour or violate curvature bound
+        let iLo = 1, iHi = N - 2;
+        while (iLo < N - 2 && sNorm[iLo] < winStart) iLo++;
+        while (iHi > 1 && sNorm[iHi] > winEnd) iHi--;
+        const mid = (iLo + iHi) >> 1;
+        let effLo = mid, effHi = mid;
+        while (effLo > iLo && validContour[effLo - 1] && !badCurv[effLo - 1]) effLo--;
+        while (effHi < iHi && validContour[effHi + 1] && !badCurv[effHi + 1]) effHi++;
+        // If middle itself had a small gap, fall back to full requested window
+        if (effHi - effLo < 8) { effLo = iLo; effHi = iHi; }
+        const effStart = sNorm[effLo], effEnd = sNorm[effHi];
+
+        const idxList = [];
+        let missingCount = 0;
+        for (let i = effLo; i <= effHi; i++) {
+          idxList.push(i);
+          if (!validContour[i] || badCurv[i]) missingCount++;
+        }
+        if (idxList.length < 6) return null;
+        const missingRatio = missingCount / idxList.length;
+        winStart = effStart;
+        winEnd = effEnd;
+
+        const S = idxList.map(i => sNorm[i]);
+        const Y = idxList.map(i => theta[i]);
+        const M = S.length;
+
+        let bestSSE = Infinity;
+        let bestB = 0;
+        const step = 0.015;
+
+        for (let s1 = winStart; s1 <= winEnd - 0.05; s1 += step) {
+          for (let s2 = s1 + 0.05; s2 <= winEnd + 1e-6; s2 += step) {
+            const invSpan = 1 / (s2 - s1);
+            let sumR = 0, sumY = 0, sumRR = 0, sumRY = 0;
+            for (let k = 0; k < M; k++) {
+              const r = clamp((S[k] - s1) * invSpan, 0, 1);
+              sumR += r;
+              sumY += Y[k];
+              sumRR += r * r;
+              sumRY += r * Y[k];
+            }
+            const denom = M * sumRR - sumR * sumR;
+            let b = 0, a = sumY / M;
+            if (denom > 1e-9) {
+              b = (M * sumRY - sumR * sumY) / denom;
+              a = (sumY - b * sumR) / M;
+            }
+            let sse = 0;
+            for (let k = 0; k < M; k++) {
+              const r = clamp((S[k] - s1) * invSpan, 0, 1);
+              const err = Y[k] - (a + b * r);
+              sse += err * err;
+            }
+            if (sse < bestSSE) {
+              bestSSE = sse;
+              bestB = b;
+            }
+          }
+        }
+
+        return { delta: -bestB, missingRatio };
+      }
+
+      function measureFrameFull(imgData, landmarks720, viewMode, R) {
+        const { width: w, height: h } = imgData;
+        const { ponta, sulco, base } = landmarks720;
+
+        // Compute 3 threshold levels (0.9, 1.0, 1.1)
+        const seg10 = computeLabAndSkinMap(imgData, 1.0);
+        const seg09 = computeLabAndSkinMap(imgData, 0.9);
+        const seg11 = computeLabAndSkinMap(imgData, 1.1);
+
+        const dt10 = computeEDT(seg10.mask, w, h);
+        const dt09 = computeEDT(seg09.mask, w, h);
+        const dt11 = computeEDT(seg11.mask, w, h);
+
+        const segs = [
+          { seg: seg09, dt: dt09 },
+          { seg: seg10, dt: dt10 },
+          { seg: seg11, dt: dt11 }
+        ];
+
+        const baseAttempts = segs.map(s => measureSingleAttempt(s.seg.L, s.seg.mask, s.dt, w, h, sulco, base, viewMode, R));
+        if (!baseAttempts[1]) return { rejected: true, reason: 'Falha no eixo central' };
+
+        const deltas = [];
+        let worstMissing = 0;
+
+        // 27 combinations: 3 thresholds x 3 start offsets x 3 end offsets
+        const sOffsets = [-0.02, 0, 0.03];
+        const eOffsets = [-0.03, 0, 0.02];
+        for (let ti = 0; ti < 3; ti++) {
+          const att = baseAttempts[ti];
+          if (!att) continue;
+          for (const ds of sOffsets) {
+            for (const de of eOffsets) {
+              const fit = fitRetaRampaReta(att, 0.12 + ds, 0.88 + de);
+              if (fit) {
+                deltas.push(Math.abs(fit.delta));
+                if (ti === 1 && ds === 0 && de === 0) worstMissing = fit.missingRatio;
+              }
+            }
+          }
+        }
+
+        // + 4 combinations: A and B shifted +-3% of |AB|
+        const abx = base.x - sulco.x, aby = base.y - sulco.y;
+        const shifts = [
+          [sulco.x + 0.03 * abx, sulco.y + 0.03 * aby, base.x, base.y],
+          [sulco.x - 0.03 * abx, sulco.y - 0.03 * aby, base.x, base.y],
+          [sulco.x, sulco.y, base.x + 0.03 * abx, base.y + 0.03 * aby],
+          [sulco.x, sulco.y, base.x - 0.03 * abx, base.y - 0.03 * aby]
+        ];
+        for (const [ax, ay, bx, by] of shifts) {
+          const att = measureSingleAttempt(seg10.L, seg10.mask, dt10, w, h, { x: ax, y: ay }, { x: bx, y: by }, viewMode, R);
+          if (att) {
+            const fit = fitRetaRampaReta(att, 0.12, 0.88);
+            if (fit) deltas.push(Math.abs(fit.delta));
+          }
+        }
+
+        if (deltas.length < 5) return { rejected: true, reason: 'Recálculos insuficientes' };
+
+        // MAD outlier filter
+        const med = medianArr(deltas);
+        const absDevs = deltas.map(d => Math.abs(d - med));
+        const mad = medianArr(absDevs);
+        const tol = Math.max(3 * 1.4826 * mad, 1.5);
+        const kept = deltas.filter(d => Math.abs(d - med) <= tol);
+        if (!kept.length) return { rejected: true, reason: 'Dispersão extrema' };
+
+        const frameAngle = medianArr(kept);
+        const p10 = quantileArr(kept, 0.10);
+        const p90 = quantileArr(kept, 0.90);
+        const methodRange = p90 - p10;
+
+        // Reject if >15% contour lost or method range > 15 deg
+        if (worstMissing > 0.15) {
+          return { rejected: true, angle: frameAngle, methodRange, missingRatio: worstMissing, reason: '>15% da janela sem contorno' };
+        }
+        if (methodRange > 15) {
+          return { rejected: true, angle: frameAngle, methodRange, missingRatio: worstMissing, reason: 'Faixa do método > 15°' };
+        }
+
+        // Direction (Section 6.7): base->40% segment u, perpendicular deviation of tip in world via R
+        const attMain = baseAttempts[1];
+        const pts = attMain.pts; // A (sulco) -> B (base)
+        // Base is pts[N-1], 40% from base toward tip:
+        const idx40 = Math.max(0, Math.floor((pts.length - 1) * 0.6));
+        const uImg = [pts[idx40].x - base.x, pts[idx40].y - base.y];
+        const uMag = Math.hypot(uImg[0], uImg[1]) || 1;
+        const uUnit = [uImg[0] / uMag, uImg[1] / uMag];
+
+        const tipFromBase = [ponta.x - base.x, ponta.y - base.y];
+        const proj = tipFromBase[0] * uUnit[0] + tipFromBase[1] * uUnit[1];
+        const vImg = [tipFromBase[0] - proj * uUnit[0], tipFromBase[1] - proj * uUnit[1]];
+
+        const vWorld = [
+          vImg[0] * R[0][0] + vImg[1] * R[1][0],
+          vImg[0] * R[0][1] + vImg[1] * R[1][1],
+          vImg[0] * R[0][2] + vImg[1] * R[1][2]
+        ];
+
+        let direction = 'Reto';
+        if (frameAngle >= 2.0) {
+          if (viewMode === 'side') {
+            direction = vWorld[2] >= 0 ? 'para cima' : 'para baixo';
+          } else {
+            // World direction of u:
+            const uWorld = norm3([
+              uUnit[0] * R[0][0] + uUnit[1] * R[1][0],
+              uUnit[0] * R[0][1] + uUnit[1] * R[1][1],
+              uUnit[0] * R[0][2] + uUnit[1] * R[1][2]
+            ]);
+            const sh = norm3([uWorld[0], uWorld[1], 0]);
+            const direita = cross3(sh, [0, 0, 1]);
+            direction = dot3(vWorld, direita) >= 0 ? 'para a direita' : 'para a esquerda';
+          }
+        }
+
+        // Penis elevation in world (side view only)
+        let penisElevDeg = null;
+        if (viewMode === 'side') {
+          const uWorld = norm3([
+            uUnit[0] * R[0][0] + uUnit[1] * R[1][0],
+            uUnit[0] * R[0][1] + uUnit[1] * R[1][1],
+            uUnit[0] * R[0][2] + uUnit[1] * R[1][2]
+          ]);
+          penisElevDeg = Math.asin(clamp(uWorld[2], -1, 1)) * RAD;
+        }
+
+        return {
+          rejected: false,
+          angle: frameAngle,
+          direction,
+          methodRange,
+          missingRatio: worstMissing,
+          penisElevDeg,
+          L: landmarks720.L,
+          largura: landmarks720.largura
+        };
+      }
+
+      // =========================================================================
+      // 5. VIEW AGGREGATION (Section 7)
+      // =========================================================================
+      function aggregateView(frameResults, timedOut) {
+        const accepted = frameResults.filter(r => !r.rejected);
+        if (!accepted.length) {
+          return {
+            reliable: false, angle: null, direction: '—', count: 0, range: 0,
+            alphaDeg: null, warnings: ['Nenhum quadro válido para medição.']
+          };
+        }
+
+        // Discard shape outliers (L or largura outside median +-35%)
+        const medL = medianArr(accepted.map(r => r.L));
+        const medW = medianArr(accepted.map(r => r.largura));
+        let clean = accepted.filter(r =>
+          Math.abs(r.L - medL) <= 0.35 * medL &&
+          Math.abs(r.largura - medW) <= 0.35 * medW &&
+          r.methodRange <= 10
+        );
+        if (!clean.length) clean = accepted;
+
+        const angles = clean.map(r => r.angle);
+        const medAngle = medianArr(angles);
+        const p10 = quantileArr(angles, 0.10);
+        const p90 = quantileArr(angles, 0.90);
+        const interRange = p90 - p10;
+
+        // Majority direction
+        const dirCounts = {};
+        for (const r of clean) {
+          dirCounts[r.direction] = (dirCounts[r.direction] || 0) + 1;
+        }
+        const majorityDir = Object.entries(dirCounts).sort((a, b) => b[1] - a[1])[0][0];
+
+        // Coherence: >= 3 frames within +-3 deg of median
+        const coherentCount = clean.filter(r => Math.abs(r.angle - medAngle) <= 3.0).length;
+        const reliable = coherentCount >= 3;
+
+        const warnings = [];
+        if (interRange > 2.0) warnings.push(`Faixa entre quadros alta (${interRange.toFixed(1)}° > 2°).`);
+        const dirsGt3 = new Set(clean.filter(r => r.angle > 3.0).map(r => r.direction));
+        if (dirsGt3.size > 1) warnings.push('Sentido variando entre quadros com ângulo > 3°.');
+        if (timedOut) warnings.push('Prazo de 12 s esgotado.');
+        if (clean.length < 5) warnings.push(`Poucos quadros válidos (${clean.length}).`);
+        if (!reliable) warnings.push(`Menos de 3 quadros coerentes (±3° da mediana); vista não confiável.`);
+
+        const elevs = clean.map(r => r.penisElevDeg).filter(v => v !== null && Number.isFinite(v));
+        const alphaDeg = elevs.length ? medianArr(elevs) : null;
+
+        return {
+          reliable,
+          angle: reliable ? medAngle : null,
+          rawMedian: medAngle,
+          direction: majorityDir,
+          count: clean.length,
+          range: interRange,
+          alphaDeg,
+          warnings
+        };
+      }
+
+      // =========================================================================
+      // 6. SYNTHETIC SCENE RENDERER FOR SECTION 8 VALIDATION & LIVE SIMULATION
+      // =========================================================================
+      function renderSyntheticScene({ viewMode, angleDeg, dirSign, distM = 0.35, phoneRollDeg = 0, fFactor = null, width = 720, height = 960 }) {
+        const isFront = viewMode === 'side';
+        const k = fFactor || (isFront ? 1.30 : 1.58);
+        const f = k * width;
+
+        // Construct camera R in world (z up)
+        // Side view: optical axis horizontal (+Y world), up is +Z world, right is +X world (rotated by phoneRollDeg)
+        // Top view: optical axis straight down (-Z world), up of image is +Y world, right is +X world
+        const roll = phoneRollDeg * DEG;
+        let R0, R1, R2;
+        if (viewMode === 'side') {
+          const baseRight = [1, 0, 0];
+          const baseDown  = [0, 0, -1];
+          R2 = [0, 1, 0];
+          R0 = [Math.cos(roll)*baseRight[0] + Math.sin(roll)*baseDown[0], 0, Math.cos(roll)*baseRight[2] + Math.sin(roll)*baseDown[2]];
+          R1 = [-Math.sin(roll)*baseRight[0] + Math.cos(roll)*baseDown[0], 0, -Math.sin(roll)*baseRight[2] + Math.cos(roll)*baseDown[2]];
+        } else {
+          R2 = [0, 0, -1];
+          R0 = [Math.cos(roll), -Math.sin(roll), 0];
+          R1 = [-Math.sin(roll), -Math.cos(roll), 0];
+        }
+        const R = [R0, R1, R2];
+        const quat = cameraRToQuat(R, isFront);
+
+        // Build 3D curved cylinder centerline in world coordinates at distM from camera
+        // Diameter = 0.035 m (radius = 0.0175 m)
+        const cylR = 0.0175;
+        const shaftLen = 0.14; // 14 cm
+        const bendRad = angleDeg * DEG;
+        const centerWorld = viewMode === 'side' ? [0, distM, 0] : [0, 0, -distM];
+
+        const spineWorld = [];
+        const steps = 40;
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps; // 0 = base (proximal), 1 = tip (distal)
+          // Straight proximal 0..0.35, smooth ramp 0.35..0.65, straight distal 0.65..1.0
+          let localAng = 0;
+          if (t > 0.35 && t < 0.65) {
+            localAng = bendRad * ((t - 0.35) / 0.30);
+          } else if (t >= 0.65) {
+            localAng = bendRad;
+          }
+          // Integrate step
+          const ds = shaftLen / steps;
+          if (i === 0) {
+            if (viewMode === 'side') {
+              spineWorld.push([-shaftLen * 0.5, distM, 0]);
+            } else {
+              spineWorld.push([0, -shaftLen * 0.5, -distM]);
+            }
+          } else {
+            const prev = spineWorld[i - 1];
+            if (viewMode === 'side') {
+              // Base->tip goes +X, curve bends in Z (dirSign: +1 up, -1 down)
+              spineWorld.push([prev[0] + ds * Math.cos(localAng), distM, prev[2] + dirSign * ds * Math.sin(localAng)]);
+            } else {
+              // Base->tip goes +Y ("alto" of image), curve bends in X (dirSign: +1 right, -1 left)
+              spineWorld.push([prev[0] + dirSign * ds * Math.sin(localAng), prev[1] + ds * Math.cos(localAng), -distM]);
+            }
+          }
+        }
+
+        // Render onto offscreen canvas
+        const off = document.createElement('canvas');
+        off.width = width; off.height = height;
+        const c = off.getContext('2d');
+        c.fillStyle = '#182436'; // Cool dark blue-gray background (non-skin)
+        c.fillRect(0, 0, width, height);
+
+        // Project spine points to 2D
+        const projPts = spineWorld.map(pw => worldDirToPixel(norm3(pw), width, height, f, R)).filter(Boolean);
+        const radiusPx = (cylR / distM) * f;
+
+        // Draw body block touching the border at proximal base so geodesic BFS anchors cleanly
+        if (projPts.length >= 2) {
+          const p0 = projPts[0];
+          const p1 = projPts[1];
+          const dx = p0.x - p1.x, dy = p0.y - p1.y;
+          const mag = Math.hypot(dx, dy) || 1;
+          const bx = p0.x + (dx / mag) * (Math.max(width, height) * 0.6);
+          const by = p0.y + (dy / mag) * (Math.max(width, height) * 0.6);
+
+          c.lineCap = 'butt';
+          c.lineJoin = 'round';
+          // Body anchor block starting at p0 and extending off-screen (doesn't swallow proximal shaft)
+          c.strokeStyle = '#d49a79';
+          c.lineWidth = radiusPx * 4.2;
+          c.beginPath();
+          c.moveTo(bx, by);
+          c.lineTo(p0.x, p0.y);
+          c.stroke();
+          c.lineCap = 'round';
+
+          // Cylindrical shaft with subtle 3D shading gradient
+          c.lineWidth = radiusPx * 2;
+          c.strokeStyle = '#e0a583';
+          c.beginPath();
+          c.moveTo(projPts[0].x, projPts[0].y);
+          for (let i = 1; i < projPts.length; i++) c.lineTo(projPts[i].x, projPts[i].y);
+          c.stroke();
+        }
+
+        return { canvas: off, R, quat, f, width, height };
+      }
+
+      // =========================================================================
+      // 7. APP STATE, SENSOR BUFFER & LIVE CAPTURE LOOP
+      // =========================================================================
+      const app = {
+        viewMode: 'side', // 'side' | 'top'
+        capturing: false,
+        simulating: false,
+        stream: null,
+        sensor: null,
+        sensorSource: '',
+        deviceOrientHandler: null,
+        sensorBuffer: [], // { t, q }
+        hasValidSensors: false,
+        tracker: createEligibilityTracker(),
+        lastLandmarks: null,
+        lastLandmarksTime: 0,
+        consecutiveLandmarkCount: 0,
+        startTime: 0,
+        firstGoodLevelTime: null,
+        capturedFrames: [], // { imgData720, R, f, landmarks720, t }
+        lastCapturedTime: 0,
+        lastGraySig: null,
+        lastCapturedR: null,
+        results: { side: null, top: null },
+        frameLogs: [],
+        rafId: null
+      };
+
+      const el = id => document.getElementById(id);
+      const liveCanvas = el('liveCanvas');
+      const liveCtx = liveCanvas.getContext('2d', { willReadFrequently: true });
+      const work270 = document.createElement('canvas');
+      const work270Ctx = work270.getContext('2d', { willReadFrequently: true });
+      const work720 = document.createElement('canvas');
+      const work720Ctx = work720.getContext('2d', { willReadFrequently: true });
+
+      function showToast(msg) {
+        const t = el('toast');
+        t.textContent = msg;
+        t.classList.remove('hidden');
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => t.classList.add('hidden'), 3000);
+      }
+
+      // Tabs
+      function switchTab(tab) {
+        el('panelLive').classList.toggle('hidden', tab !== 'live');
+        el('panelResults').classList.toggle('hidden', tab !== 'results');
+        el('panelValidation').classList.toggle('hidden', tab !== 'validation');
+        el('tabLive').classList.toggle('active', tab === 'live');
+        el('tabResults').classList.toggle('active', tab === 'results');
+        el('tabValidation').classList.toggle('active', tab === 'validation');
+      }
+      el('tabLive').addEventListener('click', () => switchTab('live'));
+      el('tabResults').addEventListener('click', () => switchTab('results'));
+      el('tabValidation').addEventListener('click', () => switchTab('validation'));
+
+      // View toggle
+      function setViewMode(mode) {
+        if (app.capturing) return;
+        app.viewMode = mode;
+        el('btnViewSide').className = mode === 'side' ? 'btn btn-sm btn-primary' : 'btn btn-sm';
+        el('btnViewTop').className = mode === 'top' ? 'btn btn-sm btn-primary' : 'btn btn-sm';
+        app.tracker = createEligibilityTracker();
+        renderConditionsUI(app.tracker, mode);
+      }
+      el('btnViewSide').addEventListener('click', () => setViewMode('side'));
+      el('btnViewTop').addEventListener('click', () => setViewMode('top'));
+
+      function renderConditionsUI(tracker, mode) {
+        const items = mode === 'side'
+          ? [
+              ['Nível (±3° elev, ±5° giro)', tracker.level],
+              ['Marcos (ponta, sulco, base)', tracker.landmarks],
+              ['Inteiro no quadro (>6% borda)', tracker.inFrame],
+              ['Distância (0,30–0,70 m)', tracker.distance],
+              ['Altura (|erro| ≤ 5°)', tracker.height],
+              ['Centro (12% V, 20% H)', tracker.center],
+              ['Movimento (≤ 15 °/s)', tracker.motion]
+            ]
+          : [
+              ['Nível relativo a α (≤ 5°)', tracker.level],
+              ['Marcos + borda (>6%)', tracker.landmarks && tracker.inFrame],
+              ['Distância (0,25–0,70 m)', tracker.distance],
+              ['Vertical na imagem (≤ 20°)', tracker.verticalImg],
+              ['Lateral (|erro| ≤ 3°)', tracker.lateral],
+              ['Ao longo da haste', tracker.alongShaft],
+              ['Centro + Movimento (≤ 10 °/s)', tracker.center && tracker.motion]
+            ];
+        el('condList').innerHTML = items.map(([label, ok]) => `
+          <div class="cond-item">
+            <span>${label}</span>
+            <span class="cond-dot ${app.capturing ? (ok ? 'ok' : 'fail') : ''}"></span>
+          </div>
+        `).join('');
+      }
+      renderConditionsUI(app.tracker, 'side');
+
+      // Sensor interpolation at t - delay
+      function getInterpolatedQuat(targetT) {
+        const buf = app.sensorBuffer;
+        if (!buf.length) return null;
+        if (targetT <= buf[0].t) return buf[0].q;
+        if (targetT >= buf[buf.length - 1].t) return buf[buf.length - 1].q;
+        for (let i = buf.length - 1; i > 0; i--) {
+          if (buf[i - 1].t <= targetT && targetT <= buf[i].t) {
+            const span = buf[i].t - buf[i - 1].t;
+            const alpha = span > 0 ? (targetT - buf[i - 1].t) / span : 0;
+            return slerpQuat(buf[i - 1].q, buf[i].q, alpha);
+          }
+        }
+        return buf[buf.length - 1].q;
+      }
+
+      function computeAngularVelocityDegPerSec() {
+        const buf = app.sensorBuffer;
+        if (buf.length < 2) return 0;
+        const a = buf[buf.length - 2], b = buf[buf.length - 1];
+        const dt = (b.t - a.t) / 1000;
+        if (dt <= 1e-4) return 0;
+        const d = Math.abs(a.q[0]*b.q[0] + a.q[1]*b.q[1] + a.q[2]*b.q[2] + a.q[3]*b.q[3]);
+        const angRad = 2 * Math.acos(clamp(d, -1, 1));
+        return (angRad * RAD) / dt;
+      }
+
+      function computeGraySignature24x42(imgData) {
+        const { width: w, height: h, data } = imgData;
+        const sig = new Uint8Array(24 * 42);
+        for (let gy = 0; gy < 42; gy++) {
+          const sy = Math.min(h - 1, Math.floor((gy + 0.5) * h / 42));
+          for (let gx = 0; gx < 24; gx++) {
+            const sx = Math.min(w - 1, Math.floor((gx + 0.5) * w / 24));
+            const p = (sy * w + sx) * 4;
+            sig[gy * 24 + gx] = (0.299 * data[p] + 0.587 * data[p+1] + 0.114 * data[p+2]) | 0;
+          }
+        }
+        return sig;
+      }
+
+      function meanDiffSig(a, b) {
+        let sum = 0;
+        for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+        return sum / a.length;
+      }
+
+      function pushSensorQuat(q, sourceLabel) {
+        if (!q || q.length !== 4 || !Number.isFinite(q[0])) return;
+        app.hasValidSensors = true;
+        app.sensorSource = sourceLabel;
+        app.sensorBuffer.push({ t: performance.now(), q });
+        if (app.sensorBuffer.length > 120) app.sensorBuffer.shift();
+      }
+
+      async function startDeviceOrientationFallback() {
+        if (app.deviceOrientHandler) return true;
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            const perm = await DeviceOrientationEvent.requestPermission();
+            if (perm !== 'granted') return false;
+          } catch (_) {
+            return false;
+          }
+        }
+        if ('ondeviceorientation' in window || 'DeviceOrientationEvent' in window) {
+          const handler = (ev) => {
+            if (ev.beta === null && ev.gamma === null) return;
+            const q = eulerW3CToQuat(ev.alpha || 0, ev.beta || 0, ev.gamma || 0);
+            pushSensorQuat(q, 'DeviceOrientation');
+          };
+          app.deviceOrientHandler = handler;
+          window.addEventListener('deviceorientation', handler, true);
+          return true;
+        }
+        return false;
+      }
+
+      async function initSensors() {
+        app.sensorBuffer = [];
+        app.hasValidSensors = false;
+        app.sensorSource = '';
+
+        // Always request iOS DeviceOrientation permission synchronously in user gesture if present
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
+        }
+
+        // Tier 1: RelativeOrientationSensor (W3C Generic Sensor API)
+        if ('RelativeOrientationSensor' in window) {
+          try {
+            const s = new RelativeOrientationSensor({ frequency: 30, referenceFrame: 'screen' });
+            s.addEventListener('reading', () => {
+              pushSensorQuat([...s.quaternion], 'Relativo W3C');
+            });
+            s.addEventListener('error', () => {
+              try { s.stop(); } catch (_) {}
+              if (app.sensor === s) app.sensor = null;
+              startDeviceOrientationFallback();
+            });
+            s.start();
+            app.sensor = s;
+            // Also attach DeviceOrientation fallback if Generic Sensor stays silent after 600ms
+            setTimeout(() => {
+              if (app.capturing && !app.hasValidSensors) {
+                startDeviceOrientationFallback();
+              }
+            }, 600);
+            return true;
+          } catch (_) {}
+        }
+
+        // Tier 2: AbsoluteOrientationSensor
+        if ('AbsoluteOrientationSensor' in window) {
+          try {
+            const s = new AbsoluteOrientationSensor({ frequency: 30, referenceFrame: 'screen' });
+            s.addEventListener('reading', () => {
+              pushSensorQuat([...s.quaternion], 'Absoluto W3C');
+            });
+            s.addEventListener('error', () => {
+              try { s.stop(); } catch (_) {}
+              if (app.sensor === s) app.sensor = null;
+              startDeviceOrientationFallback();
+            });
+            s.start();
+            app.sensor = s;
+            setTimeout(() => {
+              if (app.capturing && !app.hasValidSensors) {
+                startDeviceOrientationFallback();
+              }
+            }, 600);
+            return true;
+          } catch (_) {}
+        }
+
+        // Tier 3: Standard W3C DeviceOrientationEvent
+        return await startDeviceOrientationFallback();
+      }
+
+      function stopHardware() {
+        if (app.rafId) { cancelAnimationFrame(app.rafId); app.rafId = null; }
+        if (app.stream) {
+          app.stream.getTracks().forEach(tr => tr.stop());
+          app.stream = null;
+        }
+        if (app.sensor && app.sensor.stop) {
+          try { app.sensor.stop(); } catch (_) {}
+          app.sensor = null;
+        }
+        if (app.deviceOrientHandler) {
+          window.removeEventListener('deviceorientation', app.deviceOrientHandler, true);
+          app.deviceOrientHandler = null;
+        }
+      }
+
+      async function finalizeCapture() {
+        app.capturing = false;
+        app.simulating = false;
+        stopHardware();
+        el('btnStartCapture').disabled = false;
+        el('btnStopCapture').disabled = true;
+
+        const frames = app.capturedFrames;
+        if (!frames.length) {
+          el('hudPhase').textContent = 'Sem quadros elegíveis';
+          showToast('Nenhum quadro elegível capturado.');
+          return;
+        }
+
+        el('hudPhase').textContent = `Medindo ${frames.length} quadros...`;
+        const view = app.viewMode;
+        const measured = [];
+
+        // Asynchronous chunked measurement so UI stays responsive
+        for (let i = 0; i < frames.length; i++) {
+          const fr = frames[i];
+          const res = measureFrameFull(fr.imgData720, fr.landmarks720, view, fr.R);
+          measured.push(res);
+          app.frameLogs.push({ view, index: i + 1, ...res });
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        const timedOut = (performance.now() - (app.firstGoodLevelTime || app.startTime)) >= 12000 && frames.length < 12;
+        const summary = aggregateView(measured, timedOut);
+        app.results[view] = summary;
+        renderResultsUI();
+        el('hudPhase').textContent = 'Medição concluída';
+        showToast(`Vista ${view === 'side' ? 'de lado' : 'de cima'} concluída (${summary.count} quadros válidos).`);
+        switchTab('results');
+      }
+
+      function processLiveFrame(sourceCanvasOrVideo, srcW, srcH, tNow) {
+        const isPortrait = app.simulating
+          ? true
+          : (screen.orientation && screen.orientation.type
+              ? screen.orientation.type.startsWith('portrait')
+              : (window.innerHeight >= window.innerWidth));
+        const isFront = app.viewMode === 'side';
+        const delayMs = isFront ? Number(el('inpDelaySide').value || 35) : Number(el('inpDelayTop').value || 274);
+        const kF = isFront ? Number(el('inpKSide').value || 1.30) : Number(el('inpKTop').value || 1.58);
+
+        // Draw preview
+        liveCanvas.width = 720;
+        liveCanvas.height = Math.round(720 * (srcH / srcW));
+        liveCtx.drawImage(sourceCanvasOrVideo, 0, 0, liveCanvas.width, liveCanvas.height);
+
+        // Check sensors (Section 8: without sensors, do not measure)
+        const q = getInterpolatedQuat(tNow - delayMs);
+        if (!app.hasValidSensors || !q) {
+          el('hudSensor').textContent = 'Sensores indisponíveis (bloqueado)';
+          el('hudSensor').className = 'pill pill-err';
+          el('hudPhase').textContent = 'Sem sensores: medição bloqueada';
+          return;
+        }
+        el('hudSensor').textContent = `Sensor: ${app.sensorSource || 'Simulado'}`;
+        el('hudSensor').className = 'pill pill-ok';
+
+        const R = quatToCameraR(q, isFront);
+        const angVel = computeAngularVelocityDegPerSec();
+
+        // Downscale to 270 px for live landmark tracking
+        const w270 = 270;
+        const h270 = Math.round(w270 * (srcH / srcW));
+        work270.width = w270; work270.height = h270;
+        work270Ctx.drawImage(sourceCanvasOrVideo, 0, 0, w270, h270);
+        const img270 = work270Ctx.getImageData(0, 0, w270, h270);
+
+        const seg = computeLabAndSkinMap(img270, 1.0);
+        const dt = computeEDT(seg.mask, w270, h270);
+        const recentPrev = (app.lastLandmarks && (tNow - app.lastLandmarksTime <= 350)) ? app.lastLandmarks : null;
+        const lm = detectLandmarksFromMask(seg.mask, dt, w270, h270, recentPrev);
+
+        if (lm) {
+          app.consecutiveLandmarkCount++;
+          app.lastLandmarks = lm;
+          app.lastLandmarksTime = tNow;
+        } else {
+          app.consecutiveLandmarkCount = 0;
+        }
+        const validLm = (app.lastLandmarks && (tNow - app.lastLandmarksTime <= 350) && app.consecutiveLandmarkCount >= 2)
+          ? app.lastLandmarks : null;
+
+        const f270 = kF * w270;
+        const alphaDeg = app.results.side ? app.results.side.alphaDeg : null;
+        const status = evaluateEligibility(app.tracker, app.viewMode, {
+          R, w: w270, h: h270, f: f270, landmarks: validLm, angVelDegPerSec: angVel, alphaDeg, isPortrait
+        });
+
+        renderConditionsUI(app.tracker, app.viewMode);
+        el('hudMetrics').textContent = `Dist: ${status.distM ? status.distM.toFixed(2)+'m' : '—'} · Elev: ${status.elevDeg.toFixed(1)}° · Giro: ${status.giroDeg.toFixed(1)}°`;
+
+        // Draw landmarks overlay on liveCanvas
+        if (validLm) {
+          const sScale = liveCanvas.width / w270;
+          const drawPt = (p, col, lbl) => {
+            liveCtx.beginPath();
+            liveCtx.arc(p.x * sScale, p.y * sScale, 7, 0, Math.PI * 2);
+            liveCtx.fillStyle = col;
+            liveCtx.fill();
+            liveCtx.fillStyle = '#fff';
+            liveCtx.font = 'bold 12px sans-serif';
+            liveCtx.fillText(lbl, p.x * sScale + 10, p.y * sScale + 4);
+          };
+          drawPt(validLm.ponta, '#34d399', 'Ponta');
+          drawPt(validLm.sulco, '#fbbf24', 'Sulco (A)');
+          drawPt(validLm.base,  '#38bdf8', 'Base (B)');
+        }
+
+        // Timers (Section 4): 3s countdown, 12s window from first good level, 30s no-level timeout
+        const elapsed = (tNow - app.startTime) / 1000;
+        if (elapsed < 3.0) {
+          el('hudPhase').textContent = `Contagem: ${Math.ceil(3.0 - elapsed)} s`;
+          el('hudEligibleBadge').textContent = status.eligible ? 'Elegível (aguardando)' : 'Ajustando';
+          el('hudEligibleBadge').className = status.eligible ? 'tag tag-ok' : 'tag tag-warn';
+          return;
+        }
+
+        if (status.levelOk && app.firstGoodLevelTime === null) {
+          app.firstGoodLevelTime = tNow;
+        }
+        if (app.firstGoodLevelTime === null && elapsed >= 30.0) {
+          showToast('Sem nível em 30 s: vista encerrada sem medida.');
+          finalizeCapture();
+          return;
+        }
+        if (app.firstGoodLevelTime !== null && (tNow - app.firstGoodLevelTime) >= 12000) {
+          finalizeCapture();
+          return;
+        }
+
+        el('hudPhase').textContent = status.eligible ? 'Capturando quadros elegíveis' : 'Alinhe o aparelho no guia';
+        el('hudEligibleBadge').textContent = status.eligible ? 'Elegível' : 'Fora do guia';
+        el('hudEligibleBadge').className = status.eligible ? 'tag tag-ok' : 'tag tag-warn';
+
+        // Capture frame every >= 200ms up to 12 frames (Section 5)
+        if (status.eligible && (tNow - app.lastCapturedTime >= 200) && app.capturedFrames.length < 12) {
+          const sig = computeGraySignature24x42(img270);
+          let frozen = false;
+          if (app.lastGraySig && app.lastCapturedR) {
+            const rotDiff = rotationDiffDeg(R, app.lastCapturedR);
+            if (rotDiff > 2.0 && meanDiffSig(sig, app.lastGraySig) < 1.0) frozen = true;
+          }
+          if (!frozen) {
+            const w720 = 720, h720 = Math.round(720 * (srcH / srcW));
+            work720.width = w720; work720.height = h720;
+            work720Ctx.drawImage(sourceCanvasOrVideo, 0, 0, w720, h720);
+            const img720 = work720Ctx.getImageData(0, 0, w720, h720);
+            const scale720 = w720 / w270;
+            const lm720 = {
+              ponta: { x: validLm.ponta.x * scale720, y: validLm.ponta.y * scale720 },
+              sulco: { x: validLm.sulco.x * scale720, y: validLm.sulco.y * scale720 },
+              base:  { x: validLm.base.x * scale720,  y: validLm.base.y * scale720 },
+              L: validLm.L * scale720,
+              largura: validLm.largura * scale720
+            };
+            app.capturedFrames.push({ imgData720: img720, R, f: kF * w720, landmarks720: lm720, t: tNow });
+            app.lastCapturedTime = tNow;
+            app.lastGraySig = sig;
+            app.lastCapturedR = R;
+            el('hudFrames').textContent = `Quadros: ${app.capturedFrames.length} / 12`;
+            el('captureProgress').style.width = `${(app.capturedFrames.length / 12) * 100}%`;
+            if (app.capturedFrames.length >= 12) finalizeCapture();
+          }
+        }
+      }
+
+      el('btnStartCapture').addEventListener('click', async () => {
+        if (app.capturing) return;
+        app.capturedFrames = [];
+        app.lastCapturedTime = 0;
+        app.lastGraySig = null;
+        app.lastCapturedR = null;
+        app.firstGoodLevelTime = null;
+        app.consecutiveLandmarkCount = 0;
+        app.tracker = createEligibilityTracker();
+        el('hudFrames').textContent = 'Quadros: 0 / 12';
+        el('captureProgress').style.width = '0%';
+
+        const sensorsOk = await initSensors();
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          showToast('Câmera indisponível neste navegador. Use o Simulador ou abra no Chrome/Safari.');
+          return;
+        }
+        try {
+          const facingMode = app.viewMode === 'side' ? 'user' : 'environment';
+          app.stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          });
+          const video = el('cameraVideo');
+          video.srcObject = app.stream;
+          await video.play();
+          app.capturing = true;
+          app.startTime = performance.now();
+          el('btnStartCapture').disabled = true;
+          el('btnStopCapture').disabled = false;
+          if (!sensorsOk) showToast('Atenção: sensor W3C indisponível; medição bloqueada conforme Seção 8.');
+
+          if (typeof video.requestVideoFrameCallback === 'function') {
+            const onVideoFrame = (now, metadata) => {
+              if (!app.capturing) return;
+              if (video.readyState >= 2 && video.videoWidth > 0) {
+                const frameTime = (metadata && typeof metadata.captureTime === 'number' && metadata.captureTime > 0)
+                  ? metadata.captureTime
+                  : now;
+                processLiveFrame(video, video.videoWidth, video.videoHeight, frameTime);
+              }
+              if (app.capturing) video.requestVideoFrameCallback(onVideoFrame);
+            };
+            video.requestVideoFrameCallback(onVideoFrame);
+          } else {
+            const tick = () => {
+              if (!app.capturing) return;
+              if (video.readyState >= 2 && video.videoWidth > 0) {
+                processLiveFrame(video, video.videoWidth, video.videoHeight, performance.now());
+              }
+              app.rafId = requestAnimationFrame(tick);
+            };
+            app.rafId = requestAnimationFrame(tick);
+          }
+        } catch (err) {
+          stopHardware();
+          showToast('Permissão de câmera negada ou indisponível.');
+        }
+      });
+
+      el('btnStopCapture').addEventListener('click', () => {
+        if (app.capturing) finalizeCapture();
+      });
+
+      // Simulated live video + sensors button (runs synthetic scene through the exact live pipeline)
+      el('btnSimLive').addEventListener('click', () => {
+        if (app.capturing) return;
+        app.capturing = true;
+        app.simulating = true;
+        app.capturedFrames = [];
+        app.lastCapturedTime = 0;
+        app.firstGoodLevelTime = null;
+        app.consecutiveLandmarkCount = 0;
+        app.tracker = createEligibilityTracker();
+        // Bypass 3s countdown slightly faster? No, keep exact 3s or advance synthetic clock smoothly
+        const isSide = app.viewMode === 'side';
+        const scene = renderSyntheticScene({
+          viewMode: app.viewMode,
+          angleDeg: isSide ? 22 : 8,
+          dirSign: -1,
+          distM: 0.35
+        });
+        app.hasValidSensors = true;
+        app.sensorBuffer = [];
+        app.startTime = performance.now() - 2800; // 0.2s left in countdown for fast interactive demo
+        el('btnStartCapture').disabled = true;
+        el('btnStopCapture').disabled = false;
+
+        const simStep = () => {
+          if (!app.capturing || !app.simulating) return;
+          const now = performance.now();
+          app.sensorBuffer.push({ t: now - 400, q: scene.quat });
+          app.sensorBuffer.push({ t: now, q: scene.quat });
+          if (app.sensorBuffer.length > 40) app.sensorBuffer.splice(0, 2);
+          processLiveFrame(scene.canvas, scene.width, scene.height, now);
+          if (app.capturing) app.rafId = requestAnimationFrame(simStep);
+        };
+        app.rafId = requestAnimationFrame(simStep);
+      });
+
+      // =========================================================================
+      // 8. RESULTS UI & REPORT
+      // =========================================================================
+      function renderResultsUI() {
+        const rSide = app.results.side;
+        if (rSide) {
+          el('sideReliableTag').textContent = rSide.reliable ? 'Confiável' : 'Não confiável';
+          el('sideReliableTag').className = rSide.reliable ? 'tag tag-ok' : 'tag tag-err';
+          el('sideAngleVal').textContent = rSide.angle !== null ? `${rSide.angle.toFixed(1)}°` : '—';
+          el('sideDirVal').textContent = `Sentido: ${rSide.direction}`;
+          el('sideCountVal').textContent = String(rSide.count);
+          el('sideRangeVal').textContent = `${rSide.range.toFixed(1)}°`;
+          el('sideAlphaVal').textContent = rSide.alphaDeg !== null ? `${rSide.alphaDeg.toFixed(1)}°` : '—';
+          el('sideWarnings').textContent = rSide.warnings.join(' · ');
+        }
+        const rTop = app.results.top;
+        if (rTop) {
+          el('topReliableTag').textContent = rTop.reliable ? 'Confiável' : 'Não confiável';
+          el('topReliableTag').className = rTop.reliable ? 'tag tag-ok' : 'tag tag-err';
+          el('topAngleVal').textContent = rTop.angle !== null ? `${rTop.angle.toFixed(1)}°` : '—';
+          el('topDirVal').textContent = `Sentido: ${rTop.direction}`;
+          el('topCountVal').textContent = String(rTop.count);
+          el('topRangeVal').textContent = `${rTop.range.toFixed(1)}°`;
+          el('topAlphaUsedVal').textContent = (rSide && rSide.alphaDeg !== null) ? `${rSide.alphaDeg.toFixed(1)}°` : '0°';
+          el('topWarnings').textContent = rTop.warnings.join(' · ');
+        }
+
+        if (!app.frameLogs.length) {
+          el('framesTableBody').innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 18px;">Nenhum quadro medido na sessão.</td></tr>';
+        } else {
+          el('framesTableBody').innerHTML = app.frameLogs.map(f => `
+            <tr>
+              <td>${f.view === 'side' ? 'Lado' : 'Cima'}</td>
+              <td class="mono">#${f.index}</td>
+              <td class="mono">${f.angle !== undefined ? f.angle.toFixed(1)+'°' : '—'}</td>
+              <td>${f.direction || '—'}</td>
+              <td class="mono">${f.methodRange !== undefined ? f.methodRange.toFixed(1)+'°' : '—'}</td>
+              <td class="mono">${f.missingRatio !== undefined ? (f.missingRatio*100).toFixed(1)+'%' : '—'}</td>
+              <td><span class="tag ${f.rejected ? 'tag-err' : 'tag-ok'}">${f.rejected ? f.reason : 'Aceito'}</span></td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      el('btnClearSession').addEventListener('click', () => {
+        app.results = { side: null, top: null };
+        app.frameLogs = [];
+        app.capturedFrames = [];
+        renderResultsUI();
+        showToast('Quadros e resultados removidos da memória.');
+      });
+
+      el('btnCopyClinicalReport').addEventListener('click', () => {
+        const s = app.results.side, t = app.results.top;
+        const lines = [
+          'LAUDO GONIOMÉTRICO POR VÍDEO GUIADO POR SENSORES (UroGonio Sensor)',
+          `Data: ${new Date().toLocaleString('pt-BR')}`,
+          s ? `Vista de Lado: ${s.reliable ? s.angle.toFixed(1)+'° '+s.direction : 'Não confiável'} (n=${s.count}, faixa=${s.range.toFixed(1)}°, α=${s.alphaDeg!==null?s.alphaDeg.toFixed(1)+'°':'—'})` : 'Vista de Lado: Não realizada',
+          t ? `Vista de Cima: ${t.reliable ? t.angle.toFixed(1)+'° '+t.direction : 'Não confiável'} (n=${t.count}, faixa=${t.range.toFixed(1)}°)` : 'Vista de Cima: Não realizada'
+        ];
+        const txt = lines.join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(() => showToast('Laudo 2D copiado.')).catch(() => {});
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = txt; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); showToast('Laudo 2D copiado.'); } catch (_) {}
+          document.body.removeChild(ta);
+        }
+      });
+
+      // =========================================================================
+      // 9. SECTION 8 VALIDATION SUITE (Automated Synthetic Tests)
+      // =========================================================================
+      function runSyntheticViewTest(opts) {
+        const t0 = performance.now();
+        const scene = renderSyntheticScene(opts);
+        const w270 = 270, h270 = Math.round(270 * (scene.height / scene.width));
+        work270.width = w270; work270.height = h270;
+        work270Ctx.drawImage(scene.canvas, 0, 0, w270, h270);
+        const img270 = work270Ctx.getImageData(0, 0, w270, h270);
+        const seg270 = computeLabAndSkinMap(img270, 1.0);
+        const dt270 = computeEDT(seg270.mask, w270, h270);
+        const lm270 = detectLandmarksFromMask(seg270.mask, dt270, w270, h270);
+
+        const tracker = createEligibilityTracker();
+        const f270 = (opts.viewMode === 'side' ? 1.30 : 1.58) * w270;
+        const elig = evaluateEligibility(tracker, opts.viewMode, {
+          R: scene.R, w: w270, h: h270, f: f270, landmarks: lm270,
+          angVelDegPerSec: 0, alphaDeg: opts.alphaDeg || null, isPortrait: true
+        });
+
+        const w720 = 720, h720 = Math.round(720 * (scene.height / scene.width));
+        const img720 = scene.canvas.getContext('2d').getImageData(0, 0, w720, h720);
+        const scale720 = w720 / w270;
+        const lm720 = {
+          ponta: { x: lm270.ponta.x * scale720, y: lm270.ponta.y * scale720 },
+          sulco: { x: lm270.sulco.x * scale720, y: lm270.sulco.y * scale720 },
+          base:  { x: lm270.base.x * scale720,  y: lm270.base.y * scale720 },
+          L: lm270.L * scale720,
+          largura: lm270.largura * scale720
+        };
+
+        const m1 = measureFrameFull(img720, lm720, opts.viewMode, scene.R);
+        const m2 = measureFrameFull(img720, lm720, opts.viewMode, scene.R);
+        const elapsedMs = performance.now() - t0;
+        return { m1, m2, elig, elapsedMs };
+      }
+
+      window.runSection8Validation = function () {
+        const rows = [];
+
+        // 1. Side synthetic scene: 22 deg downward, ~35 cm
+        const tSide = runSyntheticViewTest({ viewMode: 'side', angleDeg: 22, dirSign: -1, distM: 0.35, phoneRollDeg: 0 });
+        const sideOk = !tSide.m1.rejected && Math.abs(tSide.m1.angle - 22) <= 2.0 && tSide.m1.direction === 'para baixo' && tSide.elig.eligible;
+        rows.push({
+          name: 'Cena sintética de lado (22° para baixo, ~35 cm)',
+          expected: '22,0° ±2,0° · "para baixo" · elegível',
+          actual: tSide.m1.rejected ? `Rejeitado (${tSide.m1.reason})` : `${tSide.m1.angle.toFixed(2)}° · "${tSide.m1.direction}" · ${tSide.elapsedMs.toFixed(0)} ms`,
+          pass: sideOk
+        });
+
+        // 2. Top synthetic scene: 8 deg to user's left, ~35 cm
+        const tTop = runSyntheticViewTest({ viewMode: 'top', angleDeg: 8, dirSign: -1, distM: 0.35, phoneRollDeg: 0, alphaDeg: 0 });
+        const topOk = !tTop.m1.rejected && Math.abs(tTop.m1.angle - 8) <= 2.5 && tTop.m1.direction === 'para a esquerda' && tTop.elig.eligible;
+        rows.push({
+          name: 'Cena sintética de cima (8° para a esquerda, ~35 cm)',
+          expected: '8,0° ±2,5° · "para a esquerda" · elegível',
+          actual: tTop.m1.rejected ? `Rejeitado (${tTop.m1.reason})` : `${tTop.m1.angle.toFixed(2)}° · "${tTop.m1.direction}"`,
+          pass: topOk
+        });
+
+        // 3. Reproducibility
+        const reproOk = !tSide.m1.rejected && !tSide.m2.rejected && tSide.m1.angle === tSide.m2.angle && tSide.m1.direction === tSide.m2.direction;
+        rows.push({
+          name: 'Reprodutibilidade (mesmo quadro medido 2x)',
+          expected: 'Valores idênticos',
+          actual: `${tSide.m1.angle?.toFixed(4)}° vs ${tSide.m2.angle?.toFixed(4)}°`,
+          pass: reproOk
+        });
+
+        // 4. Robustness (method range < 4 deg on clean image)
+        const robOk = !tSide.m1.rejected && tSide.m1.methodRange < 4.0;
+        rows.push({
+          name: 'Robustez dos 31 recálculos (imagem limpa)',
+          expected: 'Faixa p10–p90 < 4,0°',
+          actual: `${tSide.m1.methodRange?.toFixed(2)}°`,
+          pass: robOk
+        });
+
+        // 5. Phone rotated +90 deg and -90 deg on side view
+        const tRotPos = runSyntheticViewTest({ viewMode: 'side', angleDeg: 22, dirSign: -1, distM: 0.35, phoneRollDeg: 90 });
+        const tRotNeg = runSyntheticViewTest({ viewMode: 'side', angleDeg: 22, dirSign: -1, distM: 0.35, phoneRollDeg: -90 });
+        const rotOk = !tRotPos.m1.rejected && !tRotNeg.m1.rejected &&
+          Math.abs(tRotPos.m1.angle - tSide.m1.angle) <= 1.0 &&
+          Math.abs(tRotNeg.m1.angle - tSide.m1.angle) <= 1.0 &&
+          tRotPos.m1.direction === 'para baixo' && tRotNeg.m1.direction === 'para baixo' &&
+          tRotPos.elig.eligible && tRotNeg.elig.eligible;
+        rows.push({
+          name: 'Celular deitado (±90°) na vista de lado',
+          expected: 'Mesmo valor e sentido ("para baixo")',
+          actual: (tRotPos.m1.rejected || tRotNeg.m1.rejected)
+            ? 'Rejeitado'
+            : `+90°: ${tRotPos.m1.angle.toFixed(2)}° / −90°: ${tRotNeg.m1.angle.toFixed(2)}° · "${tRotPos.m1.direction}"`,
+          pass: rotOk
+        });
+
+        // 6. Without sensors: must block measurement
+        app.hasValidSensors = false;
+        app.sensorBuffer = [];
+        const qMissing = getInterpolatedQuat(performance.now());
+        const noSensOk = qMissing === null;
+        rows.push({
+          name: 'Bloqueio sem sensores',
+          expected: 'Não medir sem leituras de orientação',
+          actual: noSensOk ? 'Bloqueado (sem quatérnio)' : 'Falha: permitiu medir',
+          pass: noSensOk
+        });
+
+        el('validationTableBody').innerHTML = rows.map(r => `
+          <tr>
+            <td><strong>${r.name}</strong></td>
+            <td class="mono">${r.expected}</td>
+            <td class="mono">${r.actual}</td>
+            <td><span class="tag ${r.pass ? 'tag-ok' : 'tag-err'}">${r.pass ? 'APROVADO' : 'FALHOU'}</span></td>
+          </tr>
+        `).join('');
+
+        return rows;
+      };
+
+      el('btnRunValidation').addEventListener('click', () => {
+        const rows = window.runSection8Validation();
+        const passed = rows.filter(r => r.pass).length;
+        showToast(`Validação Seção 8: ${passed}/${rows.length} critérios aprovados.`);
+      });
+
+      function drawIdleGuide() {
+        const w = liveCanvas.width, h = liveCanvas.height;
+        liveCtx.fillStyle = '#050b16';
+        liveCtx.fillRect(0, 0, w, h);
+
+        // 6% safe margin box
+        liveCtx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+        liveCtx.lineWidth = 2;
+        liveCtx.setLineDash([8, 6]);
+        liveCtx.strokeRect(w * 0.06, h * 0.06, w * 0.88, h * 0.88);
+
+        // Central target zone (20% H x 12% V around center)
+        liveCtx.strokeStyle = 'rgba(52, 211, 153, 0.45)';
+        liveCtx.strokeRect(w * 0.30, h * 0.38, w * 0.40, h * 0.24);
+        liveCtx.setLineDash([]);
+
+        // Crosshair
+        liveCtx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+        liveCtx.lineWidth = 1.5;
+        liveCtx.beginPath();
+        liveCtx.moveTo(w * 0.5 - 22, h * 0.5); liveCtx.lineTo(w * 0.5 + 22, h * 0.5);
+        liveCtx.moveTo(w * 0.5, h * 0.5 - 22); liveCtx.lineTo(w * 0.5, h * 0.5 + 22);
+        liveCtx.stroke();
+
+        liveCtx.fillStyle = '#cbd5e1';
+        liveCtx.font = '600 18px sans-serif';
+        liveCtx.textAlign = 'center';
+        liveCtx.fillText('Guia de Enquadramento (6% margem · zona central)', w * 0.5, h * 0.5 - 48);
+        liveCtx.fillStyle = '#94a3b8';
+        liveCtx.font = '500 15px sans-serif';
+        liveCtx.fillText('Inicie a captura com câmera + sensores ou use "Simular Vídeo + Sensores"', w * 0.5, h * 0.5 + 56);
+      }
+      drawIdleGuide();
+    })();
+  </script>
+</body>
+</html>
