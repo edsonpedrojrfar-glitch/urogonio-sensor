@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -173,6 +174,38 @@
     th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
     th { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .btn { min-height: 38px; }
+    .btn-lg { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+    .stepper {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px;
+    }
+    .step-pill {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 7px 10px; font-size: 11px; font-weight: 600; color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .step-pill.active { border-color: rgba(56,189,248,0.5); color: var(--sky); background: var(--sky-dim); }
+    .step-pill.done { border-color: rgba(52,211,153,0.45); color: var(--emerald); background: var(--emerald-dim); }
+    .step-num {
+      width: 18px; height: 18px; border-radius: 50%; background: rgba(148,163,184,0.18);
+      display: inline-flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
+    }
+    .step-pill.active .step-num { background: var(--sky); color: #082f49; }
+    .step-pill.done .step-num { background: var(--emerald); color: #064e3b; }
+    details.calib-details summary {
+      cursor: pointer; list-style: none; font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em; color: #cbd5e1;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    details.calib-details summary::-webkit-details-marker { display: none; }
+    .secure-banner {
+      background: var(--amber-dim); border: 1px solid rgba(251,191,36,0.4); color: #fde68a;
+      border-radius: 10px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px;
+    }
+    .res-visual {
+      width: 84px; height: 84px; flex-shrink: 0; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    }
     .toast {
       position: fixed; bottom: 18px; right: 18px; z-index: 60;
       background: var(--surface-2); border: 1px solid var(--border-hi); color: var(--text);
@@ -195,14 +228,25 @@
       </div>
 
       <nav class="tabs" aria-label="Navegação principal">
-        <button id="tabLive" class="tab-btn active" type="button">1. Captura ao Vivo</button>
-        <button id="tabResults" class="tab-btn" type="button">2. Resultados &amp; Laudo</button>
-        <button id="tabValidation" class="tab-btn" type="button">3. Validação Sintética (Seção 8)</button>
+        <button id="tabLive" class="tab-btn active" type="button">1. Captura</button>
+        <button id="tabResults" class="tab-btn" type="button">2. Laudo</button>
+        <button id="tabValidation" class="tab-btn" type="button">3. Validação 3D</button>
       </nav>
     </div>
   </header>
 
   <main>
+    <div id="insecureBanner" class="secure-banner hidden">
+      <strong>Contexto não seguro detectado:</strong> navegadores móveis bloqueiam câmera e sensores em arquivos abertos via <code>file://</code> ou <code>content://</code>. Abra via <strong>HTTPS</strong> (ex.: GitHub Pages) ou <code>localhost</code> no Chrome/Safari.
+    </div>
+
+    <!-- Guided 3-Step Clinical Flow -->
+    <div class="stepper" aria-label="Fluxo da medição">
+      <div id="step1Pill" class="step-pill active"><span class="step-num">1</span><span>Vista de Lado</span></div>
+      <div id="step2Pill" class="step-pill"><span class="step-num">2</span><span>Vista de Cima</span></div>
+      <div id="step3Pill" class="step-pill"><span class="step-num">3</span><span>Laudo 2D</span></div>
+    </div>
+
     <!-- TAB 1: LIVE CAPTURE -->
     <section id="panelLive" class="grid-main">
       <div class="card">
@@ -234,12 +278,13 @@
         </div>
 
         <div class="row" style="margin-top: 12px; justify-content: space-between;">
-          <div class="row">
-            <button id="btnStartCapture" type="button" class="btn btn-primary">Iniciar Captura Guiada</button>
-            <button id="btnStopCapture" type="button" class="btn btn-rose" disabled>Encerrar Vista</button>
+          <div class="row" style="flex: 1 1 auto;">
+            <button id="btnStartCapture" type="button" class="btn btn-primary btn-lg" style="flex: 1 1 170px;">Iniciar Captura Guiada</button>
+            <button id="btnStopCapture" type="button" class="btn btn-rose btn-lg" disabled>Encerrar</button>
           </div>
           <div class="row">
-            <button id="btnSimLive" type="button" class="btn btn-emerald btn-sm">Simular Vídeo + Sensores</button>
+            <button id="btnToggleMask" type="button" class="btn btn-sm">Máscara: ON</button>
+            <button id="btnSimLive" type="button" class="btn btn-emerald btn-sm">Simular 3D</button>
           </div>
         </div>
       </div>
@@ -254,8 +299,12 @@
         </div>
 
         <div class="card">
-          <div class="card-title"><span>Calibração de Sensores e Óptica</span></div>
-          <div class="grid-2">
+          <details class="calib-details">
+            <summary>
+              <span>Calibração de Sensores e Óptica</span>
+              <span style="font-size: 11px; color: var(--sky); font-weight: 600;">Ajustar ▾</span>
+            </summary>
+            <div class="grid-2" style="margin-top: 12px;">
             <div>
               <label class="field-lbl" for="inpDelaySide">Atraso Frontal (ms)</label>
               <input id="inpDelaySide" type="number" value="35" step="1" min="0" max="1000" />
@@ -273,9 +322,10 @@
               <input id="inpKTop" type="number" value="1.58" step="0.01" min="0.5" max="3.0" />
             </div>
           </div>
-          <p style="font-size: 11px; color: var(--muted); margin-top: 8px;">
-            Orientação W3C (<code class="mono">RelativeOrientationSensor</code>), captura por <code>requestVideoFrameCallback</code> quando disponível, rastreamento em 270 px e medição subpixel em 720 px. Quadros mantidos apenas em memória.
-          </p>
+            <p style="font-size: 11px; color: var(--muted); margin-top: 8px;">
+              Orientação W3C (<code class="mono">RelativeOrientationSensor</code> + fallback <code class="mono">DeviceOrientationEvent</code>), rastreamento em 270 px e medição subpixel em 720 px. Quadros mantidos apenas em memória.
+            </p>
+          </details>
         </div>
       </div>
     </section>
@@ -288,10 +338,14 @@
             <span>Vista de Lado (Dorsal / Ventral)</span>
             <span id="sideReliableTag" class="tag">Sem medida</span>
           </div>
-          <div class="row" style="justify-content: space-between; align-items: baseline;">
-            <div>
-              <div id="sideAngleVal" class="metric-big">—</div>
-              <div id="sideDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+          <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="row" style="gap: 12px; align-items: center;">
+              <div id="sideSvgWrap" class="res-visual"></div>
+              <div>
+                <div id="sideAngleVal" class="metric-big">—</div>
+                <div id="sideDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+                <div id="sideKelamiVal" style="font-size: 11px; color: var(--muted); margin-top: 2px;">Kelâmi: —</div>
+              </div>
             </div>
             <div style="text-align: right; font-size: 12px; color: var(--muted);">
               <div>Quadros válidos: <strong id="sideCountVal" style="color: var(--text);">0</strong></div>
@@ -299,7 +353,10 @@
               <div>Elevação (α): <strong id="sideAlphaVal" style="color: var(--text);">—</strong></div>
             </div>
           </div>
-          <div id="sideWarnings" style="margin-top: 10px; font-size: 11px; color: var(--amber);"></div>
+          <div id="sideWarnings" style="margin-top: 8px; font-size: 11px; color: var(--amber);"></div>
+          <div style="margin-top: 10px;">
+            <button id="btnNextTopView" type="button" class="btn btn-primary btn-sm hidden">Avançar para Passo 2: Vista de Cima →</button>
+          </div>
         </div>
 
         <div class="card" id="cardTopResult">
@@ -307,10 +364,14 @@
             <span>Vista de Cima (Lateral Esq. / Dir.)</span>
             <span id="topReliableTag" class="tag">Sem medida</span>
           </div>
-          <div class="row" style="justify-content: space-between; align-items: baseline;">
-            <div>
-              <div id="topAngleVal" class="metric-big">—</div>
-              <div id="topDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+          <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="row" style="gap: 12px; align-items: center;">
+              <div id="topSvgWrap" class="res-visual"></div>
+              <div>
+                <div id="topAngleVal" class="metric-big">—</div>
+                <div id="topDirVal" style="font-size: 13px; color: var(--sky); font-weight: 600;">Sentido: —</div>
+                <div id="topKelamiVal" style="font-size: 11px; color: var(--muted); margin-top: 2px;">Kelâmi: —</div>
+              </div>
             </div>
             <div style="text-align: right; font-size: 12px; color: var(--muted);">
               <div>Quadros válidos: <strong id="topCountVal" style="color: var(--text);">0</strong></div>
@@ -573,8 +634,8 @@
         const L = new Float32Array(n);
         const A = new Float32Array(n);
         const B = new Float32Array(n);
-        const bgSamplesA = [];
-        const bgSamplesB = [];
+        const borderAll = [];
+        const borderNonSkin = [];
 
         for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
@@ -583,54 +644,105 @@
             const [l, a, b] = srgbToLab(data[p], data[p+1], data[p+2]);
             L[i] = l; A[i] = a; B[i] = b;
 
-            if (x < 3 || x >= w - 3 || y < 3 || y >= h - 3) {
+            if (x < 4 || x >= w - 4 || y < 4 || y >= h - 4) {
               const hue = Math.atan2(b, a) * RAD;
               const chr = Math.hypot(a, b);
-              const looksSkin = hue >= -25 && hue <= 85 && chr >= 6;
-              if (!looksSkin) {
-                bgSamplesA.push(a);
-                bgSamplesB.push(b);
+              const stronglySkin = (hue >= -20 && hue <= 75 && a > 8.5 && chr >= 14.5);
+              borderAll.push([l, a, b]);
+              if (!stronglySkin) {
+                borderNonSkin.push([l, a, b]);
               }
             }
           }
         }
 
-        // White balance correction if background has strong color cast
-        let shiftA = 0, shiftB = 0;
-        if (bgSamplesA.length >= 10) {
-          const medA = medianArr(bgSamplesA);
-          const medB = medianArr(bgSamplesB);
-          const bgChroma = Math.hypot(medA, medB);
-          if (bgChroma > 12) {
-            shiftA = medA * 0.65;
-            shiftB = medB * 0.65;
+        // Estimate up to 2 background colors via 2-means clustering on non-skin border pixels (Section 3.1)
+        const bgPool = borderNonSkin.length >= 20 ? borderNonSkin : borderAll;
+        const bgColors = [];
+        if (bgPool.length > 0) {
+          // Initialize 2 seeds: min-L and max-L border samples
+          let c1 = [...bgPool[0]], c2 = [...bgPool[0]];
+          let minL = 1e9, maxL = -1e9;
+          for (const px of bgPool) {
+            if (px[0] < minL) { minL = px[0]; c1 = [...px]; }
+            if (px[0] > maxL) { maxL = px[0]; c2 = [...px]; }
+          }
+          let n1 = 0, n2 = 0;
+          for (let iter = 0; iter < 6; iter++) {
+            let s1 = [0,0,0], s2 = [0,0,0];
+            n1 = 0; n2 = 0;
+            for (const px of bgPool) {
+              const d1 = (px[0]-c1[0])**2 + (px[1]-c1[1])**2 + (px[2]-c1[2])**2;
+              const d2 = (px[0]-c2[0])**2 + (px[1]-c2[1])**2 + (px[2]-c2[2])**2;
+              if (d1 <= d2) { s1[0]+=px[0]; s1[1]+=px[1]; s1[2]+=px[2]; n1++; }
+              else { s2[0]+=px[0]; s2[1]+=px[1]; s2[2]+=px[2]; n2++; }
+            }
+            if (n1 > 0) c1 = [s1[0]/n1, s1[1]/n1, s1[2]/n1];
+            if (n2 > 0) c2 = [s2[0]/n2, s2[1]/n2, s2[2]/n2];
+          }
+          if (n1 >= n2) {
+            bgColors.push(c1);
+            const sep = Math.hypot(c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]);
+            if (n2 >= bgPool.length * 0.10 && sep > 8) bgColors.push(c2);
+          } else {
+            bgColors.push(c2);
+            const sep = Math.hypot(c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]);
+            if (n1 >= bgPool.length * 0.10 && sep > 8) bgColors.push(c1);
           }
         }
 
+        // White balance correction if dominant background has strong color cast (Section 3.1)
+        let shiftA = 0, shiftB = 0;
+        if (bgColors.length > 0) {
+          const dom = bgColors[0];
+          const bgChroma = Math.hypot(dom[1], dom[2]);
+          if (bgChroma > 12) {
+            shiftA = dom[1] * 0.55;
+            shiftB = dom[2] * 0.55;
+          }
+        }
+
+        // Compute foreground skin score rejecting pixels close to any estimated background color
+        const bgDist = new Float32Array(n);
         const skinChromas = [];
         const score = new Float32Array(n);
+
         for (let i = 0; i < n; i++) {
+          let minD = 999;
+          for (let c = 0; c < bgColors.length; c++) {
+            const bg = bgColors[c];
+            // Weight L at 0.55 so wall shadows stay close to background chromaticity
+            const d = Math.hypot(0.55 * (L[i] - bg[0]), A[i] - bg[1], B[i] - bg[2]);
+            if (d < minD) minD = d;
+          }
+          bgDist[i] = minD;
+
           const a = A[i] - shiftA;
           const b = B[i] - shiftB;
           const hue = Math.atan2(b, a) * RAD;
           const chr = Math.hypot(a, b);
-          if (hue >= -25 && hue <= 85 && L[i] > 12) {
+          const inSkinHue = hue >= -25 && hue <= 85 && L[i] > 14 && L[i] < 95;
+          if (inSkinHue && minD >= 9.5) {
             skinChromas.push(chr);
+            score[i] = chr;
+          } else {
+            score[i] = 0;
           }
-          score[i] = (hue >= -25 && hue <= 85 && L[i] > 12) ? chr : 0;
         }
 
-        const medChr = medianArr(skinChromas);
+        const medChr = skinChromas.length ? medianArr(skinChromas) : 6;
         const minC = Math.max(3, Math.min(6, 0.6 * medChr)) * threshScale;
         const highC = minC * 1.25;
         const lowC = minC * 0.75;
+        const bgHigh = 11.5 * threshScale;
+        const bgLow = 8.0 * threshScale;
 
-        // Hysteresis thresholding
+        // Hysteresis thresholding combining skin chroma and background separation
         const mask = new Uint8Array(n);
         const queue = new Int32Array(n);
         let head = 0, tail = 0;
         for (let i = 0; i < n; i++) {
-          if (score[i] >= highC) {
+          if (score[i] >= highC && bgDist[i] >= bgHigh) {
             mask[i] = 1;
             queue[tail++] = i;
           }
@@ -646,14 +758,34 @@
           ];
           for (let k = 0; k < 4; k++) {
             const nb = nbrs[k];
-            if (nb >= 0 && !mask[nb] && score[nb] >= lowC) {
+            if (nb >= 0 && !mask[nb] && score[nb] >= lowC && bgDist[nb] >= bgLow) {
               mask[nb] = 1;
               queue[tail++] = nb;
             }
           }
         }
 
-        // Fill holes (flood fill background from border on inverted mask)
+        // Light 3x3 morphological opening (erode then dilate) to remove sensor noise specks & thin bridges
+        const eroded = new Uint8Array(n);
+        for (let y = 1; y < h - 1; y++) {
+          const row = y * w;
+          for (let x = 1; x < w - 1; x++) {
+            const i = row + x;
+            if (mask[i] && mask[i-1] && mask[i+1] && mask[i-w] && mask[i+w]) eroded[i] = 1;
+          }
+        }
+        mask.fill(0);
+        for (let y = 1; y < h - 1; y++) {
+          const row = y * w;
+          for (let x = 1; x < w - 1; x++) {
+            const i = row + x;
+            if (eroded[i]) {
+              mask[i] = 1; mask[i-1] = 1; mask[i+1] = 1; mask[i-w] = 1; mask[i+w] = 1;
+            }
+          }
+        }
+
+        // Fill internal holes (flood fill background from image borders)
         const bgVis = new Uint8Array(n);
         head = 0; tail = 0;
         for (let x = 0; x < w; x++) {
@@ -683,11 +815,18 @@
             }
           }
         }
+        let fgCount = 0;
         for (let i = 0; i < n; i++) {
           if (!bgVis[i]) mask[i] = 1;
+          if (mask[i]) fgCount++;
         }
 
-        return { mask, L, A, B, minC };
+        // Safety guard: if segmentation flooded >90% of image, clear mask so EDT never blows up
+        if (fgCount > n * 0.90) {
+          mask.fill(0);
+        }
+
+        return { mask, L, A, B, minC, bgColors };
       }
 
       // Exact O(w*h) 2D Euclidean Distance Transform (squared -> sqrt)
@@ -868,10 +1007,14 @@
         }
         if (path.length < 15) return null;
 
-        // Recenter each path point onto the local EDT ridge (steepest ascent on dt)
-        const ridgePts = path.map(idx => {
+        // True tip is at geodesic extremity path[0] (do NOT pull inward by 25 steps!)
+        const rawTip = { x: path[0] % w, y: (path[0] / w) | 0 };
+
+        // Recenter shaft points onto local EDT ridge using bounded ascent (max 10 steps)
+        const ridgePts = path.map((idx, k) => {
           let cx = idx % w, cy = (idx / w) | 0;
-          for (let step = 0; step < 25; step++) {
+          const maxSteps = k < 4 ? 1 : 10;
+          for (let step = 0; step < maxSteps; step++) {
             let bestX = cx, bestY = cy, bestD = dt[cy * w + cx];
             for (let oy = -2; oy <= 2; oy++) {
               for (let ox = -2; ox <= 2; ox++) {
@@ -887,24 +1030,31 @@
           return { x: cx, y: cy, d: dt[cy * w + cx] };
         });
 
-        // Compute typical shaft radius from 15%..55% of ridge path from tip
-        const radiiSample = [];
-        const pStart = Math.floor(ridgePts.length * 0.15);
-        const pEnd = Math.floor(ridgePts.length * 0.55);
-        for (let k = pStart; k <= pEnd; k++) radiiSample.push(ridgePts[k].d);
-        const typicalRadius = Math.max(2, medianArr(radiiSample));
+        // Estimate initial tubular radius r0 strictly from the distal shaft band (past tip cap, before torso)
+        const capSkip = Math.min(Math.floor(ridgePts.length * 0.15), Math.max(6, Math.round(ridgePts[Math.min(12, ridgePts.length - 1)].d * 1.1)));
+        const distalEnd = Math.min(ridgePts.length - 4, capSkip + Math.max(18, Math.floor(ridgePts.length * 0.30)));
+        const initRadii = [];
+        for (let k = capSkip; k <= distalEnd; k++) initRadii.push(ridgePts[k].d);
+        const r0 = Math.max(2, medianArr(initRadii));
 
-        // Base (B): coming from tip along ridge, where thickness ceases to be tubular (> 1.38 * typicalRadius)
+        // Base (B): walking from tip toward body, first sustained expansion where thickness > 1.25 * r0
         let basePathIdx = Math.floor(ridgePts.length * 0.85);
-        for (let k = pStart; k < ridgePts.length - 2; k++) {
-          if (ridgePts[k].d > typicalRadius * 1.28) {
-            basePathIdx = Math.max(pEnd, k - 4);
+        for (let k = capSkip + 4; k < ridgePts.length - 3; k++) {
+          if (ridgePts[k].d > r0 * 1.25 && ridgePts[k + 1].d > r0 * 1.25 && ridgePts[k + 2].d > r0 * 1.25) {
+            basePathIdx = Math.max(capSkip + 8, k - 2);
             break;
           }
         }
 
+        // Recompute pure tubular radius strictly between 20% and 80% of ponta -> base
+        const pureRadii = [];
+        const rLo = Math.max(2, Math.floor(basePathIdx * 0.20));
+        const rHi = Math.max(rLo + 2, Math.floor(basePathIdx * 0.80));
+        for (let k = rLo; k <= rHi; k++) pureRadii.push(ridgePts[k].d);
+        const typicalRadius = Math.max(2, medianArr(pureRadii));
+
         const sulcusPathIdx = Math.max(1, Math.round(basePathIdx * 0.22));
-        const ponta = { x: ridgePts[0].x, y: ridgePts[0].y };
+        const ponta = rawTip;
         const sulco = { x: ridgePts[sulcusPathIdx].x, y: ridgePts[sulcusPathIdx].y };
         const base = { x: ridgePts[basePathIdx].x, y: ridgePts[basePathIdx].y };
         const L = Math.hypot(ponta.x - base.x, ponta.y - base.y);
@@ -1107,8 +1257,11 @@
         for (let i = 4; i < N - 4; i++) {
           radSamples.push(dt[clamp(Math.round(pts[i].y), 0, h-1) * w + clamp(Math.round(pts[i].x), 0, w-1)]);
         }
-        const halfW = Math.max(4, medianArr(radSamples));
-        const searchR = Math.round(halfW * 2.4);
+        const maxHalfW = Math.min(w, h) * 0.22;
+        const rawHalfW = medianArr(radSamples);
+        if (!Number.isFinite(rawHalfW) || rawHalfW <= 1 || rawHalfW > maxHalfW) return null;
+        const halfW = Math.max(4, rawHalfW);
+        const searchR = clamp(Math.round(halfW * 2.4), 8, Math.floor(Math.min(w, h) * 0.40));
 
         const sampleMask = (x, y) => {
           const ix = clamp(Math.round(x), 0, w - 1);
@@ -1597,6 +1750,7 @@
       // =========================================================================
       const app = {
         viewMode: 'side', // 'side' | 'top'
+        showMaskOverlay: true,
         capturing: false,
         simulating: false,
         stream: null,
@@ -1660,6 +1814,10 @@
       }
       el('btnViewSide').addEventListener('click', () => setViewMode('side'));
       el('btnViewTop').addEventListener('click', () => setViewMode('top'));
+      el('btnToggleMask').addEventListener('click', () => {
+        app.showMaskOverlay = !app.showMaskOverlay;
+        el('btnToggleMask').textContent = app.showMaskOverlay ? 'Máscara: ON' : 'Máscara: OFF';
+      });
 
       function renderConditionsUI(tracker, mode) {
         const items = mode === 'side'
@@ -1941,6 +2099,22 @@
         renderConditionsUI(app.tracker, app.viewMode);
         el('hudMetrics').textContent = `Dist: ${status.distM ? status.distM.toFixed(2)+'m' : '—'} · Elev: ${status.elevDeg.toFixed(1)}° · Giro: ${status.giroDeg.toFixed(1)}°`;
 
+        // Draw translucent segmentation mask overlay so user can verify background separation live
+        if (app.showMaskOverlay) {
+          const mCanvas = document.createElement('canvas');
+          mCanvas.width = w270; mCanvas.height = h270;
+          const mCtx = mCanvas.getContext('2d');
+          const mImg = mCtx.createImageData(w270, h270);
+          for (let i = 0; i < seg.mask.length; i++) {
+            if (seg.mask[i]) {
+              const p = i * 4;
+              mImg.data[p] = 56; mImg.data[p+1] = 189; mImg.data[p+2] = 248; mImg.data[p+3] = 72;
+            }
+          }
+          mCtx.putImageData(mImg, 0, 0);
+          liveCtx.drawImage(mCanvas, 0, 0, liveCanvas.width, liveCanvas.height);
+        }
+
         // Draw landmarks overlay on liveCanvas
         if (validLm) {
           const sScale = liveCanvas.width / w270;
@@ -1953,15 +2127,67 @@
             liveCtx.font = 'bold 12px sans-serif';
             liveCtx.fillText(lbl, p.x * sScale + 10, p.y * sScale + 4);
           };
+          // Draw shaft centerline connecting Base -> Sulco -> Ponta
+          liveCtx.strokeStyle = 'rgba(255,255,255,0.75)';
+          liveCtx.lineWidth = 3;
+          liveCtx.beginPath();
+          liveCtx.moveTo(validLm.base.x * sScale, validLm.base.y * sScale);
+          liveCtx.lineTo(validLm.sulco.x * sScale, validLm.sulco.y * sScale);
+          liveCtx.lineTo(validLm.ponta.x * sScale, validLm.ponta.y * sScale);
+          liveCtx.stroke();
+
           drawPt(validLm.ponta, '#34d399', 'Ponta');
           drawPt(validLm.sulco, '#fbbf24', 'Sulco (A)');
           drawPt(validLm.base,  '#38bdf8', 'Base (B)');
         }
 
+        // Draw Artificial Horizon & Level Bubble directly on canvas for intuitive one-handed alignment
+        {
+          const cx = liveCanvas.width * 0.5, cy = liveCanvas.height * 0.5;
+          const levelColor = status.levelOk ? '#34d399' : '#fbbf24';
+          liveCtx.save();
+          // Safe margin & center target box
+          liveCtx.strokeStyle = app.tracker.inFrame ? 'rgba(52,211,153,0.35)' : 'rgba(251,113,133,0.35)';
+          liveCtx.lineWidth = 2;
+          liveCtx.setLineDash([8, 6]);
+          liveCtx.strokeRect(liveCanvas.width * 0.06, liveCanvas.height * 0.06, liveCanvas.width * 0.88, liveCanvas.height * 0.88);
+          liveCtx.strokeStyle = app.tracker.center ? 'rgba(52,211,153,0.55)' : 'rgba(148,163,184,0.35)';
+          liveCtx.strokeRect(liveCanvas.width * 0.30, liveCanvas.height * 0.38, liveCanvas.width * 0.40, liveCanvas.height * 0.24);
+          liveCtx.setLineDash([]);
+
+          // Horizon bar (tilts with giro, shifts vertically with elev)
+          const pitchShift = clamp(status.elevDeg * 4, -80, 80);
+          const rollRad = clamp(status.giroDeg, -45, 45) * DEG;
+          liveCtx.translate(cx, cy + (app.viewMode === 'side' ? pitchShift : 0));
+          liveCtx.rotate(rollRad);
+          liveCtx.strokeStyle = levelColor;
+          liveCtx.lineWidth = 3;
+          liveCtx.beginPath();
+          liveCtx.moveTo(-70, 0); liveCtx.lineTo(-18, 0);
+          liveCtx.moveTo(18, 0);  liveCtx.lineTo(70, 0);
+          liveCtx.stroke();
+          liveCtx.beginPath();
+          liveCtx.arc(0, 0, 12, 0, Math.PI * 2);
+          liveCtx.stroke();
+          liveCtx.restore();
+        }
+
         // Timers (Section 4): 3s countdown, 12s window from first good level, 30s no-level timeout
         const elapsed = (tNow - app.startTime) / 1000;
         if (elapsed < 3.0) {
-          el('hudPhase').textContent = `Contagem: ${Math.ceil(3.0 - elapsed)} s`;
+          const secLeft = Math.ceil(3.0 - elapsed);
+          el('hudPhase').textContent = `Contagem: ${secLeft} s`;
+          liveCtx.save();
+          liveCtx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+          liveCtx.beginPath();
+          liveCtx.arc(liveCanvas.width * 0.5, liveCanvas.height * 0.5, 56, 0, Math.PI * 2);
+          liveCtx.fill();
+          liveCtx.fillStyle = '#38bdf8';
+          liveCtx.font = '800 54px sans-serif';
+          liveCtx.textAlign = 'center';
+          liveCtx.textBaseline = 'middle';
+          liveCtx.fillText(String(secLeft), liveCanvas.width * 0.5, liveCanvas.height * 0.5 + 2);
+          liveCtx.restore();
           el('hudEligibleBadge').textContent = status.eligible ? 'Elegível (aguardando)' : 'Ajustando';
           el('hudEligibleBadge').className = status.eligible ? 'tag tag-ok' : 'tag tag-warn';
           return;
@@ -1980,7 +2206,21 @@
           return;
         }
 
-        el('hudPhase').textContent = status.eligible ? 'Capturando quadros elegíveis' : 'Alinhe o aparelho no guia';
+        let guideMsg = 'Capturando quadros elegíveis';
+        if (!status.eligible) {
+          if (!app.tracker.level) guideMsg = 'Nivele o celular (elevação/giro)';
+          else if (!app.tracker.landmarks) guideMsg = 'Enquadre a haste (verifique a máscara)';
+          else if (!app.tracker.inFrame) guideMsg = 'Afaste das bordas (>6% margem)';
+          else if (!app.tracker.distance) guideMsg = status.distM < 0.30 ? 'Afaste o celular' : 'Aproxime o celular';
+          else if (app.viewMode === 'side' && !app.tracker.height) guideMsg = 'Alinhe a altura da câmera';
+          else if (app.viewMode === 'top' && !app.tracker.verticalImg) guideMsg = 'Aponte a ponta para o topo da tela';
+          else if (app.viewMode === 'top' && !app.tracker.lateral) guideMsg = 'Centralize lateralmente sobre a haste';
+          else if (app.viewMode === 'top' && !app.tracker.alongShaft) guideMsg = 'Ajuste o ângulo ao longo da haste';
+          else if (!app.tracker.center) guideMsg = 'Centralize a haste no retângulo';
+          else if (!app.tracker.motion) guideMsg = 'Mantenha o aparelho mais parado';
+          else guideMsg = 'Alinhe o aparelho no guia';
+        }
+        el('hudPhase').textContent = guideMsg;
         el('hudEligibleBadge').textContent = status.eligible ? 'Elegível' : 'Fora do guia';
         el('hudEligibleBadge').className = status.eligible ? 'tag tag-ok' : 'tag tag-warn';
 
@@ -2009,6 +2249,7 @@
             app.lastCapturedTime = tNow;
             app.lastGraySig = sig;
             app.lastCapturedR = R;
+            if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) {} }
             el('hudFrames').textContent = `Quadros: ${app.capturedFrames.length} / 12`;
             el('captureProgress').style.width = `${(app.capturedFrames.length / 12) * 100}%`;
             if (app.capturedFrames.length >= 12) finalizeCapture();
@@ -2119,6 +2360,50 @@
       // =========================================================================
       // 8. RESULTS UI & REPORT
       // =========================================================================
+      function kelamiLabel(deg) {
+        if (deg === null || !Number.isFinite(deg)) return '—';
+        if (deg < 5) return 'Reto / Sem desvio (< 5°)';
+        if (deg <= 30) return 'Grau 1 · Leve (≤ 30°)';
+        if (deg <= 60) return 'Grau 2 · Moderada (31°–60°)';
+        return 'Grau 3 · Grave (> 60°)';
+      }
+
+      function buildCurveSvg(angleDeg, direction, isSide) {
+        if (angleDeg === null || !Number.isFinite(angleDeg)) {
+          return '<svg width="64" height="64" viewBox="0 0 64 64"><line x1="12" y1="32" x2="52" y2="32" stroke="#334155" stroke-width="5" stroke-linecap="round"/></svg>';
+        }
+        const rad = Math.min(85, angleDeg) * DEG;
+        const color = angleDeg <= 30 ? '#34d399' : (angleDeg <= 60 ? '#fbbf24' : '#fb7185');
+        if (isSide) {
+          const sign = direction === 'para cima' ? -1 : 1;
+          const x2 = 34 + Math.cos(rad) * 22;
+          const y2 = 34 + sign * Math.sin(rad) * 22;
+          return `<svg width="72" height="72" viewBox="0 0 72 72">
+            <line x1="10" y1="34" x2="62" y2="34" stroke="#334155" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <path d="M 12 34 L 34 34 L ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="34" cy="34" r="3.5" fill="#fff"/>
+          </svg>`;
+        } else {
+          const sign = direction === 'para a direita' ? 1 : -1;
+          const x2 = 36 + sign * Math.sin(rad) * 24;
+          const y2 = 36 - Math.cos(rad) * 24;
+          return `<svg width="72" height="72" viewBox="0 0 72 72">
+            <line x1="36" y1="60" x2="36" y2="10" stroke="#334155" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <path d="M 36 58 L 36 36 L ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="36" cy="36" r="3.5" fill="#fff"/>
+          </svg>`;
+        }
+      }
+
+      function updateStepperUI() {
+        const sDone = Boolean(app.results.side && app.results.side.reliable);
+        const tDone = Boolean(app.results.top && app.results.top.reliable);
+        el('step1Pill').className = 'step-pill ' + (sDone ? 'done' : (app.viewMode === 'side' ? 'active' : ''));
+        el('step2Pill').className = 'step-pill ' + (tDone ? 'done' : (app.viewMode === 'top' ? 'active' : ''));
+        el('step3Pill').className = 'step-pill ' + (sDone && tDone ? 'done' : ((sDone || tDone) ? 'active' : ''));
+        el('btnNextTopView').classList.toggle('hidden', !sDone || tDone);
+      }
+
       function renderResultsUI() {
         const rSide = app.results.side;
         if (rSide) {
@@ -2130,6 +2415,8 @@
           el('sideRangeVal').textContent = `${rSide.range.toFixed(1)}°`;
           el('sideAlphaVal').textContent = rSide.alphaDeg !== null ? `${rSide.alphaDeg.toFixed(1)}°` : '—';
           el('sideWarnings').textContent = rSide.warnings.join(' · ');
+          el('sideKelamiVal').textContent = 'Kelâmi: ' + kelamiLabel(rSide.angle);
+          el('sideSvgWrap').innerHTML = buildCurveSvg(rSide.angle, rSide.direction, true);
         }
         const rTop = app.results.top;
         if (rTop) {
@@ -2141,8 +2428,11 @@
           el('topRangeVal').textContent = `${rTop.range.toFixed(1)}°`;
           el('topAlphaUsedVal').textContent = (rSide && rSide.alphaDeg !== null) ? `${rSide.alphaDeg.toFixed(1)}°` : '0°';
           el('topWarnings').textContent = rTop.warnings.join(' · ');
+          el('topKelamiVal').textContent = 'Kelâmi: ' + kelamiLabel(rTop.angle);
+          el('topSvgWrap').innerHTML = buildCurveSvg(rTop.angle, rTop.direction, false);
         }
 
+        updateStepperUI();
         if (!app.frameLogs.length) {
           el('framesTableBody').innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 18px;">Nenhum quadro medido na sessão.</td></tr>';
         } else {
@@ -2295,6 +2585,144 @@
           pass: noSensOk
         });
 
+        // 7–11: Realistic 3D shaded cylinder + 3D torso + 2-color warm/beige backgrounds + Gaussian noise
+        function render3DRealisticTest(opts) {
+          const { viewMode, angleDeg, dirSign, distM, penisElevDeg = 0, phoneRollDeg = 0, bgType = 'warm_wall_2color', noiseStd = 4 } = opts;
+          const width = 720, height = 960;
+          const isFront = viewMode === 'side';
+          const f = (isFront ? 1.30 : 1.58) * width;
+          const roll = phoneRollDeg * DEG, aRad = penisElevDeg * DEG, bendRad = angleDeg * DEG;
+          const shaftLen = 0.14, shaftRad = 0.0175;
+
+          // Build 3D world spine
+          const spine = [];
+          const N = 40;
+          let px = 0, py = 0, pz = 0;
+          for (let i = 0; i <= N; i++) {
+            const t = i / N;
+            let localAng = t > 0.35 && t < 0.65 ? bendRad * ((t - 0.35) / 0.30) : (t >= 0.65 ? bendRad : 0);
+            if (i > 0) {
+              const ds = shaftLen / N;
+              if (viewMode === 'side') {
+                px += ds * Math.cos(aRad + dirSign * localAng);
+                pz += ds * Math.sin(aRad + dirSign * localAng);
+              } else {
+                px += dirSign * ds * Math.sin(localAng);
+                const fwd = ds * Math.cos(localAng);
+                py += fwd * Math.cos(aRad);
+                pz += fwd * Math.sin(aRad);
+              }
+            }
+            spine.push([px, py, pz]);
+          }
+
+          let R0, R1, R2;
+          if (viewMode === 'side') {
+            R2 = [0, 1, 0];
+            const bR = [1, 0, 0], bD = [0, 0, -1];
+            R0 = [Math.cos(roll)*bR[0]+Math.sin(roll)*bD[0], 0, Math.cos(roll)*bR[2]+Math.sin(roll)*bD[2]];
+            R1 = [-Math.sin(roll)*bR[0]+Math.cos(roll)*bD[0], 0, -Math.sin(roll)*bR[2]+Math.cos(roll)*bD[2]];
+          } else {
+            // Align camera horizontal axis with horizontal chord of shaft (as user naturally holds phone over shaft)
+            const chordH = norm3([spine[N][0] - spine[0][0], spine[N][1] - spine[0][1], 0]);
+            const rightH = cross3(chordH, [0, 0, 1]);
+            R2 = norm3([Math.sin(aRad)*chordH[0], Math.sin(aRad)*chordH[1], -Math.cos(aRad)]);
+            R0 = rightH;
+            R1 = norm3(cross3(R2, R0));
+          }
+          const R = [R0, R1, R2];
+          const midW = spine[N >> 1];
+          const camPos = [midW[0]-distM*R2[0], midW[1]-distM*R2[1], midW[2]-distM*R2[2]];
+          const proj = pt => {
+            const v = [pt[0]-camPos[0], pt[1]-camPos[1], pt[2]-camPos[2]];
+            const cx = dot3(R0, v), cy = dot3(R1, v), cz = dot3(R2, v);
+            return cz > 0.01 ? { x: width*0.5 + f*(cx/cz), y: height*0.5 + f*(cy/cz), z: cz } : null;
+          };
+
+          const off = document.createElement('canvas'); off.width = width; off.height = height;
+          const c = off.getContext('2d');
+          if (bgType === 'warm_wall_2color') {
+            c.fillStyle = '#c8c2b8'; c.fillRect(0, 0, width, height*0.55);
+            c.fillStyle = '#5a5652'; c.fillRect(0, height*0.55, width, height*0.45);
+          } else {
+            c.fillStyle = '#cbb9a6'; c.fillRect(0, 0, width, height*0.52);
+            c.fillStyle = '#3d342d'; c.fillRect(0, height*0.52, width, height*0.48);
+          }
+
+          const pSpine = spine.map(proj);
+          const pB = pSpine[0], pN = pSpine[2];
+          const rPx = (shaftRad / distM) * f;
+          if (pB && pN) {
+            const dx = pB.x-pN.x, dy = pB.y-pN.y, m = Math.hypot(dx, dy)||1;
+            const ux = dx/m, uy = dy/m, nx = -uy, ny = ux;
+            const gb = c.createLinearGradient(pB.x-nx*rPx*3, pB.y-ny*rPx*3, pB.x+nx*rPx*3, pB.y+ny*rPx*3);
+            gb.addColorStop(0, '#a67257'); gb.addColorStop(0.45, '#d99e7c'); gb.addColorStop(1, '#8c5a42');
+            c.fillStyle = gb;
+            c.beginPath();
+            c.moveTo(pB.x+nx*rPx*3.8, pB.y+ny*rPx*3.8); c.lineTo(pB.x-nx*rPx*3.8, pB.y-ny*rPx*3.8);
+            c.lineTo(pB.x-nx*rPx*3.8+ux*width, pB.y-ny*rPx*3.8+uy*width); c.lineTo(pB.x+nx*rPx*3.8+ux*width, pB.y+ny*rPx*3.8+uy*width);
+            c.closePath(); c.fill();
+          }
+          for (let i = 0; i < pSpine.length - 1; i++) {
+            const a = pSpine[i], b = pSpine[i+1]; if (!a || !b) continue;
+            const segR = (shaftRad / (0.5*(a.z+b.z))) * f;
+            const tx = b.x-a.x, ty = b.y-a.y, tm = Math.hypot(tx, ty)||1, nx = -ty/tm, ny = tx/tm;
+            const g = c.createLinearGradient(a.x-nx*segR, a.y-ny*segR, a.x+nx*segR, a.y+ny*segR);
+            g.addColorStop(0, '#9c664b'); g.addColorStop(0.35, '#e3a684'); g.addColorStop(0.55, '#eab392'); g.addColorStop(1, '#8f5a40');
+            c.strokeStyle = g; c.lineWidth = segR*2; c.lineCap = 'round';
+            c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+          }
+          const img = c.getImageData(0, 0, width, height);
+          let seed = 1337;
+          const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+          for (let i = 0; i < img.data.length; i += 4) {
+            const nv = (rand()+rand()+rand()-1.5)*2*noiseStd;
+            img.data[i] = clamp(img.data[i]+nv, 0, 255);
+            img.data[i+1] = clamp(img.data[i+1]+nv, 0, 255);
+            img.data[i+2] = clamp(img.data[i+2]+nv, 0, 255);
+          }
+          c.putImageData(img, 0, 0);
+
+          const w270 = 270, h270 = 360;
+          work270.width = w270; work270.height = h270;
+          work270Ctx.drawImage(off, 0, 0, w270, h270);
+          const i270 = work270Ctx.getImageData(0, 0, w270, h270);
+          const s270 = computeLabAndSkinMap(i270, 1.0);
+          const d270 = computeEDT(s270.mask, w270, h270);
+          const l270 = detectLandmarksFromMask(s270.mask, d270, w270, h270);
+          if (!l270) return { rejected: true, reason: 'Sem marcos', eligible: false };
+          const tr = createEligibilityTracker();
+          const elg = evaluateEligibility(tr, viewMode, { R, w: w270, h: h270, f: (isFront?1.30:1.58)*w270, landmarks: l270, angVelDegPerSec: 0, alphaDeg: penisElevDeg, isPortrait: true });
+          const sc = width / w270;
+          const l720 = { ponta:{x:l270.ponta.x*sc,y:l270.ponta.y*sc}, sulco:{x:l270.sulco.x*sc,y:l270.sulco.y*sc}, base:{x:l270.base.x*sc,y:l270.base.y*sc}, L:l270.L*sc, largura:l270.largura*sc };
+          const res = measureFrameFull(c.getImageData(0, 0, width, height), l720, viewMode, R);
+          return { ...res, eligible: elg.eligible, distEst: elg.distM };
+        }
+
+        const r3dWarm = render3DRealisticTest({ viewMode: 'side', angleDeg: 35, dirSign: 1, distM: 0.42, bgType: 'warm_wall_2color', noiseStd: 5 });
+        rows.push({
+          name: 'Modelo 3D Realista: Lado 35° cima (parede cinza-quente 2 cores + ruído)',
+          expected: '35,0° ±2,5° · "para cima" · elegível',
+          actual: r3dWarm.rejected ? `Rejeitado (${r3dWarm.reason})` : `${r3dWarm.angle.toFixed(2)}° · "${r3dWarm.direction}" · dist ${r3dWarm.distEst.toFixed(2)}m`,
+          pass: !r3dWarm.rejected && r3dWarm.eligible && Math.abs(r3dWarm.angle - 35) <= 2.5 && r3dWarm.direction === 'para cima'
+        });
+
+        const r3dBeige = render3DRealisticTest({ viewMode: 'side', angleDeg: 48, dirSign: 1, distM: 0.45, bgType: 'beige_room', noiseStd: 5 });
+        rows.push({
+          name: 'Modelo 3D Realista: Lado 48° cima (parede bege difícil + ruído)',
+          expected: '48,0° ±2,5° · "para cima" · elegível',
+          actual: r3dBeige.rejected ? `Rejeitado (${r3dBeige.reason})` : `${r3dBeige.angle.toFixed(2)}° · "${r3dBeige.direction}" · dist ${r3dBeige.distEst.toFixed(2)}m`,
+          pass: !r3dBeige.rejected && r3dBeige.eligible && Math.abs(r3dBeige.angle - 48) <= 2.5 && r3dBeige.direction === 'para cima'
+        });
+
+        const r3dTopAlpha = render3DRealisticTest({ viewMode: 'top', angleDeg: 18, dirSign: 1, distM: 0.40, penisElevDeg: 25, bgType: 'warm_wall_2color', noiseStd: 4 });
+        rows.push({
+          name: 'Modelo 3D Realista: Cima 18° direita com α=+25° (parede 2 cores)',
+          expected: '18,0° ±2,5° · "para a direita" · elegível',
+          actual: r3dTopAlpha.rejected ? `Rejeitado (${r3dTopAlpha.reason})` : `${r3dTopAlpha.angle.toFixed(2)}° · "${r3dTopAlpha.direction}" · elegível: ${r3dTopAlpha.eligible ? 'Sim' : 'Não'}`,
+          pass: !r3dTopAlpha.rejected && r3dTopAlpha.eligible && Math.abs(r3dTopAlpha.angle - 18) <= 2.5 && r3dTopAlpha.direction === 'para a direita'
+        });
+
         el('validationTableBody').innerHTML = rows.map(r => `
           <tr>
             <td><strong>${r.name}</strong></td>
@@ -2345,8 +2773,21 @@
         liveCtx.font = '500 15px sans-serif';
         liveCtx.fillText('Inicie a captura com câmera + sensores ou use "Simular Vídeo + Sensores"', w * 0.5, h * 0.5 + 56);
       }
+      el('btnNextTopView').addEventListener('click', () => {
+        setViewMode('top');
+        switchTab('live');
+        updateStepperUI();
+        showToast('Vista de Cima selecionada (usando α da vista de lado).');
+      });
+      el('sideSvgWrap').innerHTML = buildCurveSvg(null, '', true);
+      el('topSvgWrap').innerHTML = buildCurveSvg(null, '', false);
+      if (window.isSecureContext === false) {
+        el('insecureBanner').classList.remove('hidden');
+      }
+      updateStepperUI();
       drawIdleGuide();
     })();
   </script>
 </body>
 </html>
+```
