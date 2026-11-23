@@ -3254,14 +3254,21 @@
         photoCtx.fillText('A mesma máscara CIE Lab + medição automática será aplicada', w * 0.5, h * 0.5 + 22);
       }
 
+      let photoJobId = 0;
+
       function analyzeLoadedPhoto() {
         if (!photoState.imgObj) {
           drawPhotoIdle();
           return;
         }
+        const jobId = ++photoJobId;
         const img = photoState.imgObj;
-        const w720 = 720;
-        const h720 = Math.max(240, Math.round(720 * (img.naturalHeight / Math.max(1, img.naturalWidth))));
+        const natW = Math.max(1, img.naturalWidth || img.width || 720);
+        const natH = Math.max(1, img.naturalHeight || img.height || 960);
+        // Cap working dimensions so tall 20:9 phone photos never exceed ~720x960 (prevents mobile browser freeze)
+        const scale720 = Math.min(720 / natW, 960 / natH, 1.0);
+        const w720 = Math.max(240, Math.round(natW * scale720));
+        const h720 = Math.max(240, Math.round(natH * scale720));
         photoCanvas.width = w720;
         photoCanvas.height = h720;
         pWork720.width = w720;
@@ -3269,8 +3276,9 @@
         pWork720Ctx.drawImage(img, 0, 0, w720, h720);
         const img720 = pWork720Ctx.getImageData(0, 0, w720, h720);
 
-        const w270 = 270;
-        const h270 = Math.max(90, Math.round(270 * (img.naturalHeight / Math.max(1, img.naturalWidth))));
+        const scale270 = Math.min(270 / natW, 360 / natH, 1.0);
+        const w270 = Math.max(120, Math.round(natW * scale270));
+        const h270 = Math.max(120, Math.round(natH * scale270));
         pWork270.width = w270;
         pWork270.height = h270;
         pWork270Ctx.drawImage(img, 0, 0, w270, h270);
@@ -3355,8 +3363,19 @@
           ? [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
           : [[1, 0, 0], [0, -1, 0], [0, 0, -1]];
 
-        const res = measureFrameFull(img720, lm720, photoState.viewMode, R, photoState.skinSeed);
-        photoState.lastResult = res;
+        el('photoHudStatus').textContent = 'Medindo ângulo (31 recálculos)...';
+        el('photoResultTag').textContent = 'Calculando...';
+        el('photoResultTag').className = 'tag tag-warn';
+
+        setTimeout(() => {
+          if (jobId !== photoJobId) return;
+          let res;
+          try {
+            res = measureFrameFull(img720, lm720, photoState.viewMode, R, photoState.skinSeed);
+          } catch (err) {
+            res = { rejected: true, reason: 'Erro interno na medição' };
+          }
+          photoState.lastResult = res;
 
         el('photoWidthVal').textContent = `${Math.round(lm720.largura)} px`;
         el('photoRangeVal').textContent = res.methodRange !== undefined ? `${res.methodRange.toFixed(1)}°` : '—';
@@ -3388,6 +3407,7 @@
             : '';
           el('btnPhotoSendReport').disabled = false;
         }
+        }, 25);
       }
 
       function loadPhotoFile(file) {
@@ -3408,8 +3428,15 @@
             showToast('Foto analisada localmente.');
           };
           img.onerror = () => {
-            if (isObjUrl) { try { URL.revokeObjectURL(url); } catch (_) {} }
-            showToast('Formato não suportado (ex.: HEIC). Use JPG ou PNG.');
+            if (isObjUrl) {
+              try { URL.revokeObjectURL(url); } catch (_) {}
+              const fr = new FileReader();
+              fr.onload = () => loadImgFromUrl(fr.result, false);
+              fr.onerror = () => showToast('Não foi possível ler a foto. Use JPG ou PNG.');
+              fr.readAsDataURL(file);
+            } else {
+              showToast('Formato não suportado pelo navegador (ex.: HEIC). Converta para JPG ou PNG.');
+            }
           };
           img.src = url;
         };
