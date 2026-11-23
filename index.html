@@ -39,9 +39,11 @@
       background: rgba(15, 23, 42, 0.96);
       border-bottom: 1px solid var(--border);
       padding: 10px 16px;
-      position: sticky;
-      top: 0;
+      position: relative;
       z-index: 30;
+    }
+    @media (min-width: 960px) {
+      header { position: sticky; top: 0; }
     }
     .header-inner {
       max-width: 1380px;
@@ -284,6 +286,7 @@
           </div>
           <div class="row">
             <button id="btnToggleMask" type="button" class="btn btn-sm">Máscara: ON</button>
+            <button id="btnClearSkinSeed" type="button" class="btn btn-sm hidden">Limpar Tom</button>
             <button id="btnSimLive" type="button" class="btn btn-emerald btn-sm">Simular 3D</button>
           </div>
         </div>
@@ -296,6 +299,10 @@
             <span id="hudEligibleBadge" class="tag">Inativo</span>
           </div>
           <div id="condList" class="cond-list"></div>
+          <div class="row" style="margin-top: 10px; justify-content: space-between; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px;">
+            <span>Contraste fundo–pele: <strong id="hudContrast" style="color: var(--text);">—</strong></span>
+            <span>Sensor: <strong id="hudSensorHz" class="mono" style="color: var(--text);">— Hz</strong></span>
+          </div>
         </div>
 
         <div class="card">
@@ -703,18 +710,15 @@
               const chr = Math.hypot(a, b);
               const stronglySkin = (hue >= -20 && hue <= 75 && a > 8.5 && chr >= 14.5);
               borderAll.push([l, a, b]);
-              if (!stronglySkin) {
-                borderNonSkin.push([l, a, b]);
-              }
+              if (!stronglySkin) borderNonSkin.push([l, a, b]);
             }
           }
         }
 
-        // Estimate up to 2 background colors via 2-means clustering on non-skin border pixels (Section 3.1)
+        // Estimate up to 2 background colors via 2-means clustering on non-skin border pixels
         const bgPool = borderNonSkin.length >= 20 ? borderNonSkin : borderAll;
         const bgColors = [];
         if (bgPool.length > 0) {
-          // Initialize 2 seeds: min-L and max-L border samples
           let c1 = [...bgPool[0]], c2 = [...bgPool[0]];
           let minL = 1e9, maxL = -1e9;
           for (const px of bgPool) {
@@ -736,52 +740,74 @@
           }
           if (n1 >= n2) {
             bgColors.push(c1);
-            const sep = Math.hypot(c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]);
-            if (n2 >= bgPool.length * 0.10 && sep > 8) bgColors.push(c2);
+            if (n2 >= bgPool.length * 0.10 && Math.hypot(c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]) > 8) bgColors.push(c2);
           } else {
             bgColors.push(c2);
-            const sep = Math.hypot(c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]);
-            if (n1 >= bgPool.length * 0.10 && sep > 8) bgColors.push(c1);
+            if (n1 >= bgPool.length * 0.10 && Math.hypot(c1[0]-c2[0], c1[1]-c2[1], c1[2]-c2[2]) > 8) bgColors.push(c1);
           }
         }
 
-        // White balance correction if dominant background has strong color cast (Section 3.1)
+        // White balance correction if dominant background has strong color cast
         let shiftA = 0, shiftB = 0;
         if (bgColors.length > 0) {
           const dom = bgColors[0];
-          const bgChroma = Math.hypot(dom[1], dom[2]);
-          if (bgChroma > 12) {
+          if (Math.hypot(dom[1], dom[2]) > 12) {
             shiftA = dom[1] * 0.55;
             shiftB = dom[2] * 0.55;
           }
         }
 
-        // Compute foreground skin score rejecting pixels close to any estimated background color
+        // Prepare regularized Mahalanobis inverse covariance in (a, b) if user tapped to calibrate skin
+        let invCov = null;
+        if (skinSeed && skinSeed.mean) {
+          const vAA = Math.max(20.25, skinSeed.varA || 20.25); // sigma_a >= 4.5
+          const vBB = Math.max(30.25, skinSeed.varB || 30.25); // sigma_b >= 5.5
+          const vAB = clamp(skinSeed.covAB || 0, -0.5 * Math.sqrt(vAA * vBB), 0.5 * Math.sqrt(vAA * vBB));
+          const det = vAA * vBB - vAB * vAB;
+          invCov = [vBB / det, -vAB / det, vAA / det];
+        }
+
         const bgDist = new Float32Array(n);
+        const isCastShadow = new Uint8Array(n);
         const skinChromas = [];
         const score = new Float32Array(n);
 
         for (let i = 0; i < n; i++) {
           let minD = 999;
+          let shadowFlag = 0;
           for (let c = 0; c < bgColors.length; c++) {
             const bg = bgColors[c];
-            // Weight L at 0.55 so wall shadows stay close to background chromaticity
-            const d = Math.hypot(0.55 * (L[i] - bg[0]), A[i] - bg[1], B[i] - bg[2]);
+            const dL = L[i] - bg[0];
+            const dAB = Math.hypot(A[i] - bg[1], B[i] - bg[2]);
+            // Shadow-invariant check: darker than wall with nearly identical wall chromaticity -> cast shadow
+            if (dL < -4.0 && dAB < 5.5) shadowFlag = 1;
+            const d = Math.hypot(0.45 * dL, A[i] - bg[1], B[i] - bg[2]);
             if (d < minD) minD = d;
           }
           bgDist[i] = minD;
+          isCastShadow[i] = shadowFlag;
+
+          if (shadowFlag) {
+            score[i] = 0;
+            continue;
+          }
 
           const a = A[i] - shiftA;
           const b = B[i] - shiftB;
           const hue = Math.atan2(b, a) * RAD;
           const chr = Math.hypot(a, b);
           const inSkinHue = hue >= -25 && hue <= 85 && L[i] > 14 && L[i] < 95;
+
           let seedMatch = false;
-          if (skinSeed) {
-            const dSeed = Math.hypot(0.45 * (L[i] - skinSeed[0]), A[i] - skinSeed[1], B[i] - skinSeed[2]);
-            if (dSeed <= 14.0 && minD >= 7.0) seedMatch = true;
+          if (invCov) {
+            const da = A[i] - skinSeed.mean[1];
+            const db = B[i] - skinSeed.mean[2];
+            const maha2 = invCov[0] * da * da + 2 * invCov[1] * da * db + invCov[2] * db * db;
+            const dLSeed = Math.abs(L[i] - skinSeed.mean[0]);
+            if (maha2 <= 6.25 && dLSeed <= 40 && minD >= 7.5) seedMatch = true;
           }
-          if ((inSkinHue && minD >= 9.5) || seedMatch) {
+
+          if ((inSkinHue && minD >= 9.0) || seedMatch) {
             skinChromas.push(chr);
             score[i] = seedMatch ? Math.max(chr, 9.0) : chr;
           } else {
@@ -793,15 +819,15 @@
         const minC = Math.max(3, Math.min(6, 0.6 * medChr)) * threshScale;
         const highC = minC * 1.25;
         const lowC = minC * 0.75;
-        const bgHigh = 11.5 * threshScale;
-        const bgLow = 8.0 * threshScale;
+        const bgHigh = 11.0 * threshScale;
+        const bgLow = 7.8 * threshScale;
 
-        // Hysteresis thresholding combining skin chroma and background separation
+        // Hysteresis thresholding (with specular-highlight tolerance for bright skin L > 68 still distinct from wall)
         const mask = new Uint8Array(n);
         const queue = new Int32Array(n);
         let head = 0, tail = 0;
         for (let i = 0; i < n; i++) {
-          if (score[i] >= highC && bgDist[i] >= bgHigh) {
+          if (!isCastShadow[i] && score[i] >= highC && bgDist[i] >= bgHigh) {
             mask[i] = 1;
             queue[tail++] = i;
           }
@@ -817,31 +843,95 @@
           ];
           for (let k = 0; k < 4; k++) {
             const nb = nbrs[k];
-            if (nb >= 0 && !mask[nb] && score[nb] >= lowC && bgDist[nb] >= bgLow) {
-              mask[nb] = 1;
-              queue[tail++] = nb;
+            if (nb >= 0 && !mask[nb] && !isCastShadow[nb] && bgDist[nb] >= bgLow) {
+              const effLow = L[nb] > 68 ? lowC * 0.65 : lowC;
+              if (score[nb] >= effLow) {
+                mask[nb] = 1;
+                queue[tail++] = nb;
+              }
             }
           }
         }
 
-        // Light 3x3 morphological opening (erode then dilate) to remove sensor noise specks & thin bridges
-        const eroded = new Uint8Array(n);
-        for (let y = 1; y < h - 1; y++) {
-          const row = y * w;
-          for (let x = 1; x < w - 1; x++) {
-            const i = row + x;
-            if (mask[i] && mask[i-1] && mask[i+1] && mask[i-w] && mask[i+w]) eroded[i] = 1;
-          }
-        }
-        mask.fill(0);
-        for (let y = 1; y < h - 1; y++) {
-          const row = y * w;
-          for (let x = 1; x < w - 1; x++) {
-            const i = row + x;
-            if (eroded[i]) {
-              mask[i] = 1; mask[i-1] = 1; mask[i+1] = 1; mask[i-w] = 1; mask[i+w] = 1;
+        // Preserve 1-px outer image border during morphology so body-to-border contact is never severed!
+        const borderSnap = new Uint8Array(n);
+        for (let x = 0; x < w; x++) { borderSnap[x] = mask[x]; borderSnap[(h-1)*w+x] = mask[(h-1)*w+x]; }
+        for (let y = 0; y < h; y++) { borderSnap[y*w] = mask[y*w]; borderSnap[y*w+w-1] = mask[y*w+w-1]; }
+
+        // Fast morphology on 270px live frames: 3x3 closing (seals specular edge notches) + 3x3 opening + 3x3 median (cuts hairs)
+        if (!useGuided) {
+          const tmp = new Uint8Array(n);
+          // 3x3 Closing: dilate -> erode
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              if (mask[i] || mask[i-1] || mask[i+1] || mask[i-w] || mask[i+w]) tmp[i] = 1;
             }
           }
+          mask.fill(0);
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              if (tmp[i] && tmp[i-1] && tmp[i+1] && tmp[i-w] && tmp[i+w]) mask[i] = 1;
+            }
+          }
+          // 3x3 Opening: erode -> dilate
+          tmp.fill(0);
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              if (mask[i] && mask[i-1] && mask[i+1] && mask[i-w] && mask[i+w]) tmp[i] = 1;
+            }
+          }
+          mask.fill(0);
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              if (tmp[i]) { mask[i]=1; mask[i-1]=1; mask[i+1]=1; mask[i-w]=1; mask[i+w]=1; }
+            }
+          }
+          // 3x3 Median filter (5+ of 9 neighbors) to cleanly strip hair fringes without shrinking shaft
+          tmp.set(mask);
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              const sum9 = tmp[i-w-1]+tmp[i-w]+tmp[i-w+1]+tmp[i-1]+tmp[i]+tmp[i+1]+tmp[i+w-1]+tmp[i+w]+tmp[i+w+1];
+              mask[i] = sum9 >= 5 ? 1 : 0;
+            }
+          }
+        } else {
+          // Light 3x3 opening before Guided Filter at 720px
+          const eroded = new Uint8Array(n);
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              if (mask[i] && mask[i-1] && mask[i+1] && mask[i-w] && mask[i+w]) eroded[i] = 1;
+            }
+          }
+          mask.fill(0);
+          for (let y = 1; y < h - 1; y++) {
+            const row = y * w;
+            for (let x = 1; x < w - 1; x++) {
+              const i = row + x;
+              if (eroded[i]) { mask[i]=1; mask[i-1]=1; mask[i+1]=1; mask[i-w]=1; mask[i+w]=1; }
+            }
+          }
+        }
+
+        // Restore outer 2-px border contact wherever the body touched the image frame and remains connected inside
+        for (let x = 2; x < w - 2; x++) {
+          if (borderSnap[x] && (mask[w + x] || mask[2*w + x])) { mask[x] = 1; mask[w + x] = 1; }
+          if (borderSnap[(h-1)*w + x] && (mask[(h-2)*w + x] || mask[(h-3)*w + x])) { mask[(h-1)*w + x] = 1; mask[(h-2)*w + x] = 1; }
+        }
+        for (let y = 2; y < h - 2; y++) {
+          if (borderSnap[y*w] && (mask[y*w + 1] || mask[y*w + 2])) { mask[y*w] = 1; mask[y*w + 1] = 1; }
+          if (borderSnap[y*w + w - 1] && (mask[y*w + w - 2] || mask[y*w + w - 3])) { mask[y*w + w - 1] = 1; mask[y*w + w - 2] = 1; }
         }
 
         // Fill internal holes (flood fill background from image borders)
@@ -875,12 +965,12 @@
           }
         }
         let fgCount = 0;
+        let bgDistSum = 0;
         for (let i = 0; i < n; i++) {
           if (!bgVis[i]) mask[i] = 1;
-          if (mask[i]) fgCount++;
+          if (mask[i]) { fgCount++; bgDistSum += bgDist[i]; }
         }
 
-        // Optional Guided Filter pass (Section 6.1) for crisp luminance-aligned edges at 720px
         if (useGuided) {
           const prob = new Float32Array(n);
           for (let i = 0; i < n; i++) prob[i] = mask[i];
@@ -892,12 +982,13 @@
           }
         }
 
-        // Safety guard: if segmentation flooded >90% of image, clear mask so EDT never blows up
         if (fgCount > n * 0.90) {
           mask.fill(0);
+          fgCount = 0;
         }
 
-        return { mask, L, A, B, minC, bgColors };
+        const contrastScore = fgCount > 0 ? (bgDistSum / fgCount) : 0;
+        return { mask, L, A, B, minC, bgColors, contrastScore };
       }
 
       // Exact O(w*h) 2D Euclidean Distance Transform (squared -> sqrt)
@@ -1078,8 +1169,20 @@
         }
         if (path.length < 15) return null;
 
-        // True tip is at geodesic extremity path[0] (do NOT pull inward by 25 steps!)
-        const rawTip = { x: path[0] % w, y: (path[0] / w) | 0 };
+        // Center Ponta on the geodesic apex dome (pixels >= 97% of maxGeo) so lateral bumps don't pull the tip off-axis
+        let apexSumX = 0, apexSumY = 0, apexCnt = 0;
+        const geoCut = maxGeo * 0.988;
+        for (let k = 0; k < bestCompPixels.length; k++) {
+          const idx = bestCompPixels[k];
+          if (geo[idx] >= geoCut && dt[idx] >= 1.5) {
+            apexSumX += idx % w;
+            apexSumY += (idx / w) | 0;
+            apexCnt++;
+          }
+        }
+        const rawTip = apexCnt > 0
+          ? { x: Math.round(apexSumX / apexCnt), y: Math.round(apexSumY / apexCnt) }
+          : { x: path[0] % w, y: (path[0] / w) | 0 };
 
         // Recenter shaft points onto local EDT ridge using bounded ascent (max 10 steps)
         const ridgePts = path.map((idx, k) => {
@@ -1110,7 +1213,7 @@
 
         // Base (B): walking from tip toward body, first sustained expansion where thickness > 1.25 * r0
         let basePathIdx = Math.floor(ridgePts.length * 0.85);
-        for (let k = capSkip + 4; k < ridgePts.length - 3; k++) {
+        for (let k = capSkip + 4; k < ridgePts.length - 4; k++) {
           if (ridgePts[k].d > r0 * 1.25 && ridgePts[k + 1].d > r0 * 1.25 && ridgePts[k + 2].d > r0 * 1.25) {
             basePathIdx = Math.max(capSkip + 8, k - 2);
             break;
@@ -1846,6 +1949,12 @@
         lastCapturedTime: 0,
         lastGraySig: null,
         lastCapturedR: null,
+        lastTrackR: null,
+        peakSharpness: 0,
+        tremorBlockStart: 0,
+        smoothedAngVel: 0,
+        wakeLock: null,
+        deviceOrientAbsHandler: null,
         results: { side: null, top: null },
         frameLogs: [],
         rafId: null
@@ -1897,22 +2006,46 @@
         app.showMaskOverlay = !app.showMaskOverlay;
         el('btnToggleMask').textContent = app.showMaskOverlay ? 'Máscara: ON' : 'Máscara: OFF';
       });
+      el('btnClearSkinSeed').addEventListener('click', () => {
+        app.userSkinSeed = null;
+        el('btnClearSkinSeed').classList.add('hidden');
+        showToast('Calibração manual de tom limpa (modo automático).');
+      });
+
       liveCanvas.addEventListener('pointerdown', (ev) => {
         if (!app.capturing || !work270.width) return;
         const rect = liveCanvas.getBoundingClientRect();
-        const rx = clamp((ev.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+        let rx = clamp((ev.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
         const ry = clamp((ev.clientY - rect.top) / Math.max(1, rect.height), 0, 1);
+        if (app.viewMode === 'side' && !app.simulating) rx = 1 - rx; // unmirror visual front camera tap
         const sx = Math.round(rx * (work270.width - 1));
         const sy = Math.round(ry * (work270.height - 1));
-        const patch = work270Ctx.getImageData(Math.max(0, sx - 2), Math.max(0, sy - 2), 5, 5).data;
-        let sl = 0, sa = 0, sb = 0, cnt = 0;
+        const rad = Math.max(6, Math.round(work270.width * 0.04));
+        const x0 = Math.max(0, sx - rad), y0 = Math.max(0, sy - rad);
+        const pw = Math.min(work270.width - x0, rad * 2 + 1);
+        const ph = Math.min(work270.height - y0, rad * 2 + 1);
+        const patch = work270Ctx.getImageData(x0, y0, pw, ph).data;
+        const vals = [];
         for (let i = 0; i < patch.length; i += 4) {
-          const [l, a, b] = srgbToLab(patch[i], patch[i+1], patch[i+2]);
-          sl += l; sa += a; sb += b; cnt++;
+          vals.push(srgbToLab(patch[i], patch[i+1], patch[i+2]));
         }
-        if (cnt > 0) {
-          app.userSkinSeed = [sl / cnt, sa / cnt, sb / cnt];
-          showToast('Tom de pele calibrado pelo toque na haste.');
+        if (vals.length > 0) {
+          const ml = vals.reduce((s, v) => s + v[0], 0) / vals.length;
+          const ma = vals.reduce((s, v) => s + v[1], 0) / vals.length;
+          const mb = vals.reduce((s, v) => s + v[2], 0) / vals.length;
+          let va = 0, vb = 0, cab = 0;
+          for (const v of vals) {
+            const da = v[1] - ma, db = v[2] - mb;
+            va += da * da; vb += db * db; cab += da * db;
+          }
+          app.userSkinSeed = {
+            mean: [ml, ma, mb],
+            varA: va / vals.length,
+            varB: vb / vals.length,
+            covAB: cab / vals.length
+          };
+          el('btnClearSkinSeed').classList.remove('hidden');
+          showToast('Tom de pele calibrado (Mahalanobis regularizado).');
         }
       });
 
@@ -1964,12 +2097,52 @@
       function computeAngularVelocityDegPerSec() {
         const buf = app.sensorBuffer;
         if (buf.length < 2) return 0;
-        const a = buf[buf.length - 2], b = buf[buf.length - 1];
-        const dt = (b.t - a.t) / 1000;
+        const latest = buf[buf.length - 1];
+        // Find sample ~120ms earlier to filter 8Hz micro-tremor quantization spikes
+        let ref = buf[0];
+        for (let i = buf.length - 2; i >= 0; i--) {
+          ref = buf[i];
+          if (latest.t - ref.t >= 115) break;
+        }
+        const dt = (latest.t - ref.t) / 1000;
         if (dt <= 1e-4) return 0;
-        const d = Math.abs(a.q[0]*b.q[0] + a.q[1]*b.q[1] + a.q[2]*b.q[2] + a.q[3]*b.q[3]);
-        const angRad = 2 * Math.acos(clamp(d, -1, 1));
-        return (angRad * RAD) / dt;
+        const d = Math.abs(ref.q[0]*latest.q[0] + ref.q[1]*latest.q[1] + ref.q[2]*latest.q[2] + ref.q[3]*latest.q[3]);
+        const netRate = (2 * Math.acos(clamp(d, -1, 1)) * RAD) / dt;
+        // Exponential smoothing (alpha = 0.35)
+        app.smoothedAngVel = app.smoothedAngVel === 0 ? netRate : (0.65 * app.smoothedAngVel + 0.35 * netRate);
+        return app.smoothedAngVel;
+      }
+
+      function computeSensorHz() {
+        const buf = app.sensorBuffer;
+        if (buf.length < 4) return 0;
+        const span = (buf[buf.length - 1].t - buf[Math.max(0, buf.length - 16)].t) / 1000;
+        return span > 0.05 ? Math.round((Math.min(15, buf.length - 1)) / span) : 0;
+      }
+
+      // Adaptive Blur Gate: average luminance gradient along mask boundary in 270px
+      function computeBoundarySharpness(Lbuf, mask, w, h) {
+        let sumG = 0, cnt = 0;
+        for (let y = 2; y < h - 2; y += 2) {
+          const row = y * w;
+          for (let x = 2; x < w - 2; x += 2) {
+            const i = row + x;
+            if (mask[i] && (!mask[i-1] || !mask[i+1] || !mask[i-w] || !mask[i+w])) {
+              const gx = Lbuf[i + 1] - Lbuf[i - 1];
+              const gy = Lbuf[i + w] - Lbuf[i - w];
+              sumG += Math.hypot(gx, gy);
+              cnt++;
+            }
+          }
+        }
+        return cnt > 10 ? (sumG / cnt) : 0;
+      }
+
+      // Predict 2D point position from previous frame using pure camera rotation homography (K * R_t * R_{t-1}^T * K^-1)
+      function predictPointByRotation(pt, w, h, f, Rprev, Rcur) {
+        if (!Rprev || !Rcur) return pt;
+        const rayWorld = pixelToRay(pt.x, pt.y, w, h, f, Rprev);
+        return worldDirToPixel(rayWorld, w, h, f, Rcur) || pt;
       }
 
       function computeGraySignature24x42(imgData) {
@@ -2017,7 +2190,9 @@
             pushSensorQuat(q, 'DeviceOrientation');
           };
           app.deviceOrientHandler = handler;
+          app.deviceOrientAbsHandler = handler;
           window.addEventListener('deviceorientation', handler, true);
+          window.addEventListener('deviceorientationabsolute', handler, true);
           return true;
         }
         return false;
@@ -2098,6 +2273,14 @@
           window.removeEventListener('deviceorientation', app.deviceOrientHandler, true);
           app.deviceOrientHandler = null;
         }
+        if (app.deviceOrientAbsHandler) {
+          window.removeEventListener('deviceorientationabsolute', app.deviceOrientAbsHandler, true);
+          app.deviceOrientAbsHandler = null;
+        }
+        if (app.wakeLock) {
+          try { app.wakeLock.release(); } catch (_) {}
+          app.wakeLock = null;
+        }
       }
 
       async function finalizeCapture() {
@@ -2147,10 +2330,17 @@
         const delayMs = isFront ? Number(el('inpDelaySide').value || 35) : Number(el('inpDelayTop').value || 274);
         const kF = isFront ? Number(el('inpKSide').value || 1.30) : Number(el('inpKTop').value || 1.58);
 
-        // Draw preview
+        // Draw preview (mirror visually on live front camera for intuitive aiming; keep work270/work720 strictly unmirrored!)
+        const mirrorVis = isFront && !app.simulating;
         liveCanvas.width = 720;
         liveCanvas.height = Math.round(720 * (srcH / srcW));
+        liveCtx.save();
+        if (mirrorVis) {
+          liveCtx.translate(liveCanvas.width, 0);
+          liveCtx.scale(-1, 1);
+        }
         liveCtx.drawImage(sourceCanvasOrVideo, 0, 0, liveCanvas.width, liveCanvas.height);
+        liveCtx.restore();
 
         // Check sensors (Section 8: without sensors, do not measure)
         const q = getInterpolatedQuat(tNow - delayMs);
@@ -2178,17 +2368,30 @@
         const recentPrev = (app.lastLandmarks && (tNow - app.lastLandmarksTime <= 350)) ? app.lastLandmarks : null;
         const lm = detectLandmarksFromMask(seg.mask, dt, w270, h270, recentPrev);
 
+        const f270 = kF * w270;
         if (lm) {
-          app.consecutiveLandmarkCount++;
+          let coherentWithPrev = true;
+          if (app.lastLandmarks && (tNow - app.lastLandmarksTime <= 350) && app.lastTrackR) {
+            const predTip = predictPointByRotation(app.lastLandmarks.ponta, w270, h270, f270, app.lastTrackR, R);
+            const jumpPx = Math.hypot(lm.ponta.x - predTip.x, lm.ponta.y - predTip.y);
+            if (jumpPx > w270 * 0.16) coherentWithPrev = false;
+          }
+          app.consecutiveLandmarkCount = coherentWithPrev ? (app.consecutiveLandmarkCount + 1) : 1;
           app.lastLandmarks = lm;
           app.lastLandmarksTime = tNow;
+          app.lastTrackR = R;
         } else {
           app.consecutiveLandmarkCount = 0;
         }
         const validLm = (app.lastLandmarks && (tNow - app.lastLandmarksTime <= 350) && app.consecutiveLandmarkCount >= 2)
           ? app.lastLandmarks : null;
 
-        const f270 = kF * w270;
+        // Live scene contrast & sensor Hz diagnostics
+        const cScore = seg.contrastScore || 0;
+        el('hudContrast').textContent = cScore >= 16 ? 'Bom' : (cScore >= 11 ? 'Regular' : 'Baixo (mude o fundo)');
+        el('hudContrast').style.color = cScore >= 16 ? 'var(--emerald)' : (cScore >= 11 ? 'var(--amber)' : 'var(--rose)');
+        const hz = computeSensorHz();
+        el('hudSensorHz').textContent = hz > 0 ? `${hz} Hz` : (app.simulating ? 'Sim' : '— Hz');
         const alphaDeg = app.results.side ? app.results.side.alphaDeg : null;
         const status = evaluateEligibility(app.tracker, app.viewMode, {
           R, w: w270, h: h270, f: f270, landmarks: validLm, angVelDegPerSec: angVel, alphaDeg, isPortrait
@@ -2210,28 +2413,32 @@
             }
           }
           maskOverlayCtx.putImageData(mImg, 0, 0);
+          liveCtx.save();
+          if (mirrorVis) { liveCtx.translate(liveCanvas.width, 0); liveCtx.scale(-1, 1); }
           liveCtx.drawImage(maskOverlayCanvas, 0, 0, liveCanvas.width, liveCanvas.height);
+          liveCtx.restore();
         }
 
         // Draw landmarks overlay on liveCanvas
         if (validLm) {
           const sScale = liveCanvas.width / w270;
+          const mapX = x => mirrorVis ? (liveCanvas.width - x * sScale) : (x * sScale);
           const drawPt = (p, col, lbl) => {
+            const vx = mapX(p.x), vy = p.y * sScale;
             liveCtx.beginPath();
-            liveCtx.arc(p.x * sScale, p.y * sScale, 7, 0, Math.PI * 2);
+            liveCtx.arc(vx, vy, 7, 0, Math.PI * 2);
             liveCtx.fillStyle = col;
             liveCtx.fill();
             liveCtx.fillStyle = '#fff';
             liveCtx.font = 'bold 12px sans-serif';
-            liveCtx.fillText(lbl, p.x * sScale + 10, p.y * sScale + 4);
+            liveCtx.fillText(lbl, vx + 10, vy + 4);
           };
-          // Draw shaft centerline connecting Base -> Sulco -> Ponta
           liveCtx.strokeStyle = 'rgba(255,255,255,0.75)';
           liveCtx.lineWidth = 3;
           liveCtx.beginPath();
-          liveCtx.moveTo(validLm.base.x * sScale, validLm.base.y * sScale);
-          liveCtx.lineTo(validLm.sulco.x * sScale, validLm.sulco.y * sScale);
-          liveCtx.lineTo(validLm.ponta.x * sScale, validLm.ponta.y * sScale);
+          liveCtx.moveTo(mapX(validLm.base.x), validLm.base.y * sScale);
+          liveCtx.lineTo(mapX(validLm.sulco.x), validLm.sulco.y * sScale);
+          liveCtx.lineTo(mapX(validLm.ponta.x), validLm.ponta.y * sScale);
           liveCtx.stroke();
 
           drawPt(validLm.ponta, '#34d399', 'Ponta');
@@ -2306,7 +2513,16 @@
 
         let guideMsg = 'Capturando quadros elegíveis';
         if (!status.eligible) {
-          if (!app.tracker.level) guideMsg = 'Nivele o celular (elevação/giro)';
+          if (!isPortrait) {
+            guideMsg = 'Trave a rotação da tela em Retrato';
+          } else if (!app.tracker.level) {
+            guideMsg = 'Nivele o celular (elevação/giro)';
+          } else if (!app.tracker.motion) {
+            if (!app.tremorBlockStart) app.tremorBlockStart = tNow;
+            guideMsg = (tNow - app.tremorBlockStart > 4000)
+              ? 'Firme o punho mantendo a postura ereta'
+              : 'Mantenha o aparelho mais parado';
+          }
           else if (!app.tracker.landmarks) guideMsg = 'Enquadre a haste (verifique a máscara)';
           else if (!app.tracker.inFrame) guideMsg = 'Afaste das bordas (>6% margem)';
           else if (!app.tracker.distance) guideMsg = status.distM < 0.30 ? 'Afaste o celular' : 'Aproxime o celular';
@@ -2315,15 +2531,20 @@
           else if (app.viewMode === 'top' && !app.tracker.lateral) guideMsg = 'Centralize lateralmente sobre a haste';
           else if (app.viewMode === 'top' && !app.tracker.alongShaft) guideMsg = 'Ajuste o ângulo ao longo da haste';
           else if (!app.tracker.center) guideMsg = 'Centralize a haste no retângulo';
-          else if (!app.tracker.motion) guideMsg = 'Mantenha o aparelho mais parado';
-          else guideMsg = 'Alinhe o aparelho no guia';
+          else { app.tremorBlockStart = 0; guideMsg = 'Alinhe o aparelho no guia'; }
         }
         el('hudPhase').textContent = guideMsg;
         el('hudEligibleBadge').textContent = status.eligible ? 'Elegível' : 'Fora do guia';
         el('hudEligibleBadge').className = status.eligible ? 'tag tag-ok' : 'tag tag-warn';
 
+        // Adaptive Blur Gate (Lucky Imaging): track rolling sharpness peak and skip motion-blurred frames
+        const sharp = validLm ? computeBoundarySharpness(seg.L, seg.mask, w270, h270) : 0;
+        if (sharp > app.peakSharpness) app.peakSharpness = sharp;
+        else app.peakSharpness *= 0.996; // gentle decay if lighting changes
+        const isSharpEnough = app.peakSharpness < 4 || sharp >= app.peakSharpness * 0.72;
+
         // Capture frame every >= 200ms up to 12 frames (Section 5)
-        if (status.eligible && (tNow - app.lastCapturedTime >= 200) && app.capturedFrames.length < 12) {
+        if (status.eligible && isSharpEnough && (tNow - app.lastCapturedTime >= 200) && app.capturedFrames.length < 12) {
           const sig = computeGraySignature24x42(img270);
           let frozen = false;
           if (app.lastGraySig && app.lastCapturedR) {
@@ -2381,6 +2602,13 @@
           const video = el('cameraVideo');
           video.srcObject = app.stream;
           await video.play();
+          if (navigator.wakeLock && navigator.wakeLock.request) {
+            try { app.wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+          }
+          app.peakSharpness = 0;
+          app.tremorBlockStart = 0;
+          app.smoothedAngVel = 0;
+          app.lastTrackR = null;
           app.capturing = true;
           app.startTime = performance.now();
           el('btnStartCapture').disabled = true;
