@@ -367,6 +367,7 @@
             <div class="row">
               <button id="btnPhotoPaste" type="button" class="btn btn-primary btn-sm">Colar Foto</button>
               <button id="btnPhotoToggleMask" type="button" class="btn btn-sm">Máscara: ON</button>
+              <button id="btnPhotoToggleTangents" type="button" class="btn btn-sm">Tangentes: ON</button>
               <button id="btnPhotoClearSeed" type="button" class="btn btn-sm hidden">Limpar Tom</button>
             </div>
             <button id="btnPhotoClear" type="button" class="btn btn-rose btn-sm hidden">Limpar Foto</button>
@@ -1675,7 +1676,7 @@
         const M = S.length;
 
         let bestSSE = Infinity;
-        let bestB = 0;
+        let bestA = 0, bestB = 0, bestS1 = winStart, bestS2 = winEnd;
         const step = 0.015;
 
         for (let s1 = winStart; s1 <= winEnd - 0.05; s1 += step) {
@@ -1703,12 +1704,42 @@
             }
             if (sse < bestSSE) {
               bestSSE = sse;
+              bestA = a;
               bestB = b;
+              bestS1 = s1;
+              bestS2 = s2;
             }
           }
         }
 
-        return { delta: -bestB, missingRatio };
+        // Compute distal & proximal straight-segment anchors + virtual intersection vertex for visual audit
+        const pts = attempt.pts;
+        let dSx = 0, dSy = 0, dCnt = 0;
+        let pSx = 0, pSy = 0, pCnt = 0;
+        for (const idx of idxList) {
+          if (sNorm[idx] <= bestS1 + 0.02) { dSx += pts[idx].x; dSy += pts[idx].y; dCnt++; }
+          if (sNorm[idx] >= bestS2 - 0.02) { pSx += pts[idx].x; pSy += pts[idx].y; pCnt++; }
+        }
+        const pDist = dCnt > 0 ? { x: dSx / dCnt, y: dSy / dCnt } : { x: pts[effLo].x, y: pts[effLo].y };
+        const pProx = pCnt > 0 ? { x: pSx / pCnt, y: pSy / pCnt } : { x: pts[effHi].x, y: pts[effHi].y };
+        const rDist = bestA * DEG;
+        const rProx = (bestA + bestB) * DEG;
+        const dx1 = Math.cos(rDist), dy1 = Math.sin(rDist);
+        const dx2 = Math.cos(rProx), dy2 = Math.sin(rProx);
+        const det = dx1 * dy2 - dy1 * dx2;
+        let vertex = null;
+        if (Math.abs(det) > 1e-3) {
+          const t = ((pProx.x - pDist.x) * dy2 - (pProx.y - pDist.y) * dx2) / det;
+          const vx = pDist.x + t * dx1, vy = pDist.y + t * dy1;
+          if (Number.isFinite(vx) && Number.isFinite(vy) && Math.hypot(vx - pDist.x, vy - pDist.y) < 1200) {
+            vertex = { x: vx, y: vy };
+          }
+        }
+        return {
+          delta: -bestB,
+          missingRatio,
+          tangents: { thetaDistDeg: bestA, thetaProxDeg: bestA + bestB, pDist, pProx, vertex, s1: bestS1, s2: bestS2 }
+        };
       }
 
       function measureFrameFull(imgData, landmarks720, viewMode, R, skinSeedOverride = undefined) {
@@ -1736,6 +1767,7 @@
 
         const deltas = [];
         let worstMissing = 0;
+        let mainTangents = null;
 
         // 27 combinations: 3 thresholds x 3 start offsets x 3 end offsets
         const sOffsets = [-0.02, 0, 0.03];
@@ -1748,7 +1780,7 @@
               const fit = fitRetaRampaReta(att, 0.12 + ds, 0.88 + de);
               if (fit) {
                 deltas.push(Math.abs(fit.delta));
-                if (ti === 1 && ds === 0 && de === 0) worstMissing = fit.missingRatio;
+                if (ti === 1 && ds === 0 && de === 0) { worstMissing = fit.missingRatio; mainTangents = fit.tangents; }
               }
             }
           }
@@ -1850,7 +1882,8 @@
           L: landmarks720.L,
           largura: landmarks720.largura,
           centerline: attMain.pts,
-          validContour: attMain.validContour
+          validContour: attMain.validContour,
+          tangents: mainTangents
         };
       }
 
@@ -3224,6 +3257,7 @@
         objectUrl: null,
         viewMode: 'side', // 'side' | 'top'
         showMask: true,
+        showTangents: true,
         skinSeed: null,
         lastResult: null,
         lastWork270: null
@@ -3409,6 +3443,46 @@
             }
             photoCtx.restore();
           }
+          if (photoState.showTangents && res.tangents) {
+            const tg = res.tangents;
+            const span = Math.max(90, Math.min(260, lm720.L * 0.55));
+            const drawRay = (anchor, deg, col, lbl) => {
+              const rad = deg * DEG;
+              const dx = Math.cos(rad), dy = Math.sin(rad);
+              const x1 = anchor.x - dx * span, y1 = anchor.y - dy * span;
+              const x2 = anchor.x + dx * span, y2 = anchor.y + dy * span;
+              photoCtx.save();
+              photoCtx.strokeStyle = col;
+              photoCtx.lineWidth = 2.5;
+              photoCtx.setLineDash([8, 5]);
+              photoCtx.beginPath();
+              photoCtx.moveTo(x1, y1);
+              photoCtx.lineTo(x2, y2);
+              photoCtx.stroke();
+              photoCtx.setLineDash([]);
+              // Small anchor marker
+              photoCtx.fillStyle = col;
+              photoCtx.font = 'bold 11px sans-serif';
+              photoCtx.fillText(lbl, anchor.x + 6, anchor.y - 10);
+              photoCtx.restore();
+            };
+            drawRay(tg.pDist, tg.thetaDistDeg, '#38bdf8', 'Eixo distal');
+            drawRay(tg.pProx, tg.thetaProxDeg, '#fbbf24', 'Eixo proximal');
+            if (tg.vertex) {
+              photoCtx.save();
+              photoCtx.beginPath();
+              photoCtx.arc(tg.vertex.x, tg.vertex.y, 7, 0, Math.PI * 2);
+              photoCtx.fillStyle = '#fb7185';
+              photoCtx.fill();
+              photoCtx.strokeStyle = '#ffffff';
+              photoCtx.lineWidth = 2;
+              photoCtx.stroke();
+              photoCtx.fillStyle = '#ffffff';
+              photoCtx.font = 'bold 12px sans-serif';
+              photoCtx.fillText(`V (${res.angle.toFixed(1)}°)`, tg.vertex.x + 10, tg.vertex.y - 8);
+              photoCtx.restore();
+            }
+          }
           el('photoHudStatus').textContent = 'Análise concluída';
           el('photoHudAngle').textContent = `${res.angle.toFixed(1)}° ${res.direction}`;
           el('photoHudAngle').classList.remove('hidden');
@@ -3490,6 +3564,12 @@
       el('btnPhotoToggleMask').addEventListener('click', () => {
         photoState.showMask = !photoState.showMask;
         el('btnPhotoToggleMask').textContent = photoState.showMask ? 'Máscara: ON' : 'Máscara: OFF';
+        if (photoState.imgObj) analyzeLoadedPhoto();
+      });
+
+      el('btnPhotoToggleTangents').addEventListener('click', () => {
+        photoState.showTangents = !photoState.showTangents;
+        el('btnPhotoToggleTangents').textContent = photoState.showTangents ? 'Tangentes: ON' : 'Tangentes: OFF';
         if (photoState.imgObj) analyzeLoadedPhoto();
       });
 
